@@ -5,12 +5,15 @@
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
+import rehypeReading from './src/lib/rehype-reading.mjs';
 
 /**
  * @typedef {Object} ThemeConfig
  * @property {string} name                 Site name (wordmark, <title> suffix, manifest, RSS)
- * @property {string} [lang]               <html lang>, default 'en'
+ * @property {string} [lang]               <html lang>, default 'en'. 'zh*' switches UI labels to Chinese
+ *           and the body font stack to CJK-first.
  * @property {string} [description]        Home page meta description
+ * @property {string | string[]} [dek]     Lines shown under the home page title; defaults to `description`
  * @property {string} [tagline]            Footer text after the site name
  * @property {string} [rssDescription]     RSS channel description
  * @property {string} [manifestDescription] PWA manifest description
@@ -37,6 +40,7 @@ export function resolveConfig(user) {
     footerLink: { label: 'Archive', href: '/' },
     overrides: {},
     ...user,
+    dek: [user.dek ?? user.description ?? []].flat().filter(Boolean),
     features: { stats: false, category: true, author: true, domain: true, listen: true, ...(user.features ?? {}) },
   };
 }
@@ -68,6 +72,8 @@ export default function readingTheme(user) {
         const isTheme = (id) => id && id.startsWith(themeSrc + path.sep);
         const stripQuery = (id) => id.split('?')[0];
         updateConfig({
+          // Appended after the site's own rehype plugins (Astro concatenates arrays on merge).
+          markdown: { rehypePlugins: [rehypeReading] },
           vite: {
             plugins: [
               {

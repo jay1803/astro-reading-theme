@@ -9,16 +9,21 @@ function stripFrontmatter(raw: string): string {
   return parts.length > 2 ? parts.slice(2).join('---\n') : raw;
 }
 
-export function estimateReadingTime(postId: string): string {
+/** Estimated reading time in whole minutes (at least 1). */
+export function readingMinutes(postId: string): number {
   let raw: string;
   try {
     raw = fs.readFileSync(path.join(CONTENT_DIR, `${postId}.md`), 'utf-8');
   } catch {
-    return '1 min read';
+    return 1;
   }
   const body = stripFrontmatter(raw);
   const cjkCount = (body.match(CJK_RE) || []).length;
   const wordCount = (body.replace(CJK_RE, ' ').match(/\S+/g) || []).length;
-  const minutes = Math.max(1, Math.round(wordCount / 235 + cjkCount / 400));
-  return `${minutes} min read`;
+  return Math.max(1, Math.round(wordCount / 235 + cjkCount / 400));
+}
+
+/** English label kept for site overrides written against 0.2.x. */
+export function estimateReadingTime(postId: string): string {
+  return `${readingMinutes(postId)} min read`;
 }

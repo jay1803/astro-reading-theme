@@ -1,0 +1,165 @@
+---
+// Second row of the top bar on feed pages: shows the entry being read and opens an
+// index of the entries loaded so far. Pass it to BaseLayout with slot="subbar".
+import { panguSpace } from '../lib/rehype-pangu.mjs';
+import { readingMinutes } from '../lib/readingTime';
+import { t, entryNumber } from '../lib/i18n';
+
+interface Props {
+  entries: { post: { id: string; data: { title: string } }; num: number }[];
+  total: number;
+}
+const { entries, total } = Astro.props;
+const items = entries.map(({ post, num }) => ({
+  id: `p-${post.id}`,
+  num: entryNumber(num),
+  title: panguSpace(post.data.title),
+  minutes: t.minutes(readingMinutes(post.id)),
+}));
+const first = items[0];
+const label = items.length < total ? t.barLoaded(items.length, total) : t.barTotal(total);
+---
+
+{
+  first && (
+    <div class="subbar" data-feedbar data-total={total} data-loaded-tpl={t.barLoadedTpl} data-total-label={t.barTotal(total)}>
+      <div class="subbar-inner">
+        <button type="button" class="subbar-btn" aria-expanded="false" aria-controls="feed-index" data-bar-toggle>
+          <span class="subbar-badge" data-bar-num>{first.num}</span>
+          <span class="subbar-title" data-bar-title>{first.title}</span>
+          <span class="visually-hidden">{t.barIndex}</span>
+          <span class="subbar-chev" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </span>
+        </button>
+      </div>
+      <div class="subbar-panel" id="feed-index" hidden data-bar-panel>
+        <div class="subbar-panel-inner">
+          <p class="subbar-label" data-bar-label>{label}</p>
+          <ul class="idx-list" data-bar-list>
+            {items.map((item, i) => (
+              <li>
+                <a class="idx-link" href={`#${item.id}`} data-target={item.id} aria-current={i === 0 ? 'true' : undefined}>
+                  <span class="idx-num">{item.num}</span>
+                  <span class="idx-title">{item.title}</span>
+                  <span class="idx-meta">{item.minutes}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+<script>
+  const bar = document.querySelector<HTMLElement>('[data-feedbar]');
+  if (bar) {
+    const toggle = bar.querySelector<HTMLButtonElement>('[data-bar-toggle]')!;
+    const panel = bar.querySelector<HTMLElement>('[data-bar-panel]')!;
+    const numEl = bar.querySelector<HTMLElement>('[data-bar-num]')!;
+    const titleEl = bar.querySelector<HTMLElement>('[data-bar-title]')!;
+    const list = bar.querySelector<HTMLElement>('[data-bar-list]')!;
+    const label = bar.querySelector<HTMLElement>('[data-bar-label]')!;
+    const total = Number(bar.dataset.total || 0);
+
+    const setOpen = (open: boolean) => {
+      toggle.setAttribute('aria-expanded', String(open));
+      panel.hidden = !open;
+    };
+    toggle.addEventListener('click', () => setOpen(panel.hidden));
+    list.addEventListener('click', (event) => {
+      if ((event.target as Element).closest('a')) setOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !panel.hidden) {
+        setOpen(false);
+        toggle.focus();
+      }
+    });
+    document.addEventListener('click', (event) => {
+      if (!panel.hidden && !bar.contains(event.target as Node)) setOpen(false);
+    });
+
+    const entries = () => Array.from(document.querySelectorAll<HTMLElement>('[data-entry]'));
+    let currentId = '';
+
+    const update = () => {
+      const all = entries();
+      if (!all.length) return;
+      let current = all[0];
+      for (const el of all) {
+        if (el.getBoundingClientRect().top < 140) current = el;
+        else break;
+      }
+      if (current.id !== currentId) {
+        currentId = current.id;
+        numEl.textContent = current.dataset.num ?? '';
+        titleEl.textContent = current.dataset.title ?? '';
+        list.querySelectorAll<HTMLAnchorElement>('a[data-target]').forEach((a) => {
+          if (a.dataset.target === currentId) a.setAttribute('aria-current', 'true');
+          else a.removeAttribute('aria-current');
+        });
+      }
+      // Highlight the section being read in the current entry's side rail.
+      let active = '';
+      current.querySelectorAll<HTMLElement>('.entry-content h2[id]').forEach((h) => {
+        if (h.getBoundingClientRect().top < 160) active = h.id;
+      });
+      document.querySelectorAll<HTMLAnchorElement>('[data-entry] a[data-toc-slug]').forEach((a) => {
+        const on = active !== '' && a.dataset.tocSlug === active && current.contains(a);
+        if (on) a.setAttribute('aria-current', 'location');
+        else a.removeAttribute('aria-current');
+      });
+    };
+
+    let ticking = false;
+    window.addEventListener(
+      'scroll',
+      () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          update();
+        });
+      },
+      { passive: true }
+    );
+    update();
+
+    // InfiniteFeed announces entries it appends; add them to the index.
+    document.addEventListener('feed:append', (event) => {
+      const added = ((event as CustomEvent).detail?.entries ?? []) as HTMLElement[];
+      for (const el of added) {
+        if (!el.id || list.querySelector(`a[data-target="${CSS.escape(el.id)}"]`)) continue;
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.className = 'idx-link';
+        a.href = `#${el.id}`;
+        a.dataset.target = el.id;
+        for (const [cls, text] of [
+          ['idx-num', el.dataset.num ?? ''],
+          ['idx-title', el.dataset.title ?? ''],
+          ['idx-meta', el.dataset.minutes ?? ''],
+        ]) {
+          const span = document.createElement('span');
+          span.className = cls;
+          span.textContent = text;
+          a.append(span);
+        }
+        li.append(a);
+        list.append(li);
+      }
+      const loaded = list.querySelectorAll('li').length;
+      label.textContent =
+        loaded < total
+          ? (bar.dataset.loadedTpl ?? '').replace('{a}', String(loaded)).replace('{n}', String(total))
+          : bar.dataset.totalLabel ?? '';
+      update();
+    });
+  }
+</script>

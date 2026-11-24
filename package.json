@@ -1,6 +1,6 @@
 {
   "name": "astro-reading-theme",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Shared Astro theme for personal reading-log sites (reading, oddly, agent-learning).",
   "type": "module",
   "license": "ISC",
@@ -10,6 +10,7 @@
     "./components/*": "./src/components/*",
     "./layouts/*": "./src/layouts/*",
     "./rehype-pangu": "./src/lib/rehype-pangu.mjs",
+    "./rehype-reading": "./src/lib/rehype-reading.mjs",
     "./virtual": {
       "types": "./virtual.d.ts"
     }

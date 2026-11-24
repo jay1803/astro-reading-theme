@@ -3,131 +3,138 @@ import site from 'virtual:astro-reading-theme/config';
 import { getCollection } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { base } from '../lib/base';
+import { byDateDesc } from '../lib/sort';
 import { getDomain } from '../lib/domain';
 import { slugifyAuthor } from '../lib/author';
+import { readingMinutes } from '../lib/readingTime';
+import { panguSpace } from '../lib/rehype-pangu.mjs';
+import { t } from '../lib/i18n';
 
-const posts = await getCollection('posts');
+const posts = (await getCollection('posts')).sort(byDateDesc);
+const total = posts.length;
+const totalMinutes = posts.reduce((sum, post) => sum + readingMinutes(post.id), 0);
 
-const counts = new Map<string, number>();
+const domainCounts = new Map<string, number>();
 let withoutSource = 0;
 for (const post of posts) {
-  if (!post.data.source) {
-    withoutSource++;
-    continue;
-  }
-  const domain = getDomain(post.data.source);
+  const domain = post.data.source ? getDomain(post.data.source) : null;
   if (!domain) {
     withoutSource++;
     continue;
   }
-  counts.set(domain, (counts.get(domain) ?? 0) + 1);
+  domainCounts.set(domain, (domainCounts.get(domain) ?? 0) + 1);
 }
+const domains = [...domainCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+const maxDomain = domains.length ? domains[0][1] : 0;
 
-const domains = [...counts.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
-const maxCount = domains.length ? domains[0][1] : 0;
-
-const authorCounts = new Map<string, number>();
-const authorNames = new Map<string, string>();
+// Posts are newest first, so the first title seen per author is their latest entry.
+const authorRows = new Map<string, { name: string; count: number; latest: string }>();
 let withoutAuthor = 0;
 for (const post of posts) {
-  if (!post.data.author) {
-    withoutAuthor++;
-    continue;
-  }
-  const slug = slugifyAuthor(post.data.author);
+  const slug = post.data.author ? slugifyAuthor(post.data.author) : '';
   if (!slug) {
     withoutAuthor++;
     continue;
   }
-  authorCounts.set(slug, (authorCounts.get(slug) ?? 0) + 1);
-  if (!authorNames.has(slug)) authorNames.set(slug, post.data.author);
+  const row = authorRows.get(slug);
+  if (row) row.count++;
+  else authorRows.set(slug, { name: post.data.author!, count: 1, latest: post.data.title });
 }
+const authors = [...authorRows.entries()]
+  .map(([slug, row]) => ({ slug, ...row }))
+  .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+const maxAuthor = authors.length ? authors[0].count : 0;
 
-const authors = [...authorCounts.entries()]
-  .map(([slug, count]) => [authorNames.get(slug)!, count, slug] as const)
-  .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
-const maxAuthorCount = authors.length ? authors[0][1] : 0;
+const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0);
 ---
 
-<BaseLayout title={`Stats — ${site.name}`} description="How many entries came from which domain and which author.">
-  <div class="hero">
-    <p class="hero-eyebrow">
-      {posts.length.toLocaleString()} entries &nbsp;&middot;&nbsp; {domains.length.toLocaleString()} domains &nbsp;&middot;&nbsp; {authors.length.toLocaleString()} authors
-    </p>
-    <h1 class="hero-title">Where it's all from</h1>
-  </div>
+<BaseLayout title={`${t.statsEyebrow} — ${site.name}`} description={t.statsDescription}>
+  <header class="page-head">
+    <p class="page-eyebrow">{t.statsEyebrow}</p>
+    <h1 class="page-title">{t.statsTitle}</h1>
+    <p class="page-dek">{t.statsDek}</p>
+  </header>
 
-  <div class="tabs" role="tablist" data-stats-tabs>
-    <button type="button" role="tab" class="tab-btn" data-tab="domains" aria-selected="true">
-      Domains <span class="tab-count">{domains.length.toLocaleString()}</span>
-    </button>
-    <button type="button" role="tab" class="tab-btn" data-tab="authors" aria-selected="false">
-      Authors <span class="tab-count">{authors.length.toLocaleString()}</span>
-    </button>
-  </div>
+  <dl class="tiles">
+    <div class="tile">
+      <dt>{t.tileEntries}</dt>
+      <dd>{t.num(total)}</dd>
+    </div>
+    <div class="tile">
+      <dt>{t.tileDomains}</dt>
+      <dd>{t.num(domains.length)}</dd>
+    </div>
+    <div class="tile">
+      <dt>{t.tileAuthors}</dt>
+      <dd>{t.num(authors.length)}</dd>
+    </div>
+    <div class="tile">
+      <dt>{t.tileMinutes}</dt>
+      <dd>{t.num(totalMinutes)}<span class="tile-unit">{t.minuteUnit}</span></dd>
+    </div>
+  </dl>
 
-  <section class="tab-panel" id="panel-domains" data-panel="domains">
-    <table class="stats-table">
-      <tbody>
+  <section class="breakdown" aria-label={t.tabsLabel}>
+    <div class="tabs" role="tablist" aria-label={t.tabsLabel} data-stats-tabs>
+      <button type="button" role="tab" class="tab" id="tab-domains" data-tab="domains" aria-selected="true" aria-controls="panel-domains">
+        {t.tabDomains}<span class="tab-count">{t.num(domains.length)}</span>
+      </button>
+      <button type="button" role="tab" class="tab" id="tab-authors" data-tab="authors" aria-selected="false" aria-controls="panel-authors" tabindex="-1">
+        {t.tabAuthors}<span class="tab-count">{t.num(authors.length)}</span>
+      </button>
+    </div>
+
+    <div class="panel" role="tabpanel" id="panel-domains" aria-labelledby="tab-domains" data-panel="domains">
+      <ol class="rows">
         {
           domains.map(([domain, count]) => (
-            <tr>
-              <td class="stats-domain">
-                <a href={`${base}/domain/${domain}/`}>{domain}</a>
-              </td>
-              <td class="stats-bar-cell">
-                <span class="stats-bar" style={`width:${(count / maxCount) * 100}%`} />
-              </td>
-              <td class="stats-count">{count.toLocaleString()}</td>
-            </tr>
+            <li class="row" title={`${domain}: ${count}`}>
+              <span class="row-label">
+                {site.features.domain ? (
+                  <a class="row-name" href={`${base}/domain/${domain}/`}>{domain}</a>
+                ) : (
+                  <span class="row-name">{domain}</span>
+                )}
+                <span class="row-sub">{t.share(pct(count))}</span>
+              </span>
+              <span class="row-track" aria-hidden="true">
+                <span class="row-bar" style={`width:${(count / maxDomain) * 100}%`} />
+              </span>
+              <span class="row-count">{t.entries(count)}</span>
+            </li>
           ))
         }
-      </tbody>
-    </table>
+      </ol>
+      {withoutSource > 0 && <p class="note">{t.noSource(withoutSource)}</p>}
+    </div>
 
-    {
-      withoutSource > 0 && (
-        <p class="stats-note">
-          {withoutSource.toLocaleString()} entries have no recorded source domain.
-        </p>
-      )
-    }
-  </section>
-
-  <section class="tab-panel" id="panel-authors" data-panel="authors" hidden>
-    {
-      authors.length > 0 ? (
-        <>
-          <table class="stats-table">
-            <tbody>
-              {
-                authors.map(([name, count, slug]) => (
-                  <tr>
-                    <td class="stats-domain">
-                      <a href={`${base}/author/${slug}/`}>{name}</a>
-                    </td>
-                    <td class="stats-bar-cell">
-                      <span class="stats-bar" style={`width:${(count / maxAuthorCount) * 100}%`} />
-                    </td>
-                    <td class="stats-count">{count.toLocaleString()}</td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-
-          {
-            withoutAuthor > 0 && (
-              <p class="stats-note">
-                {withoutAuthor.toLocaleString()} entries have no recorded author.
-              </p>
-            )
-          }
-        </>
-      ) : (
-        <p class="stats-note">No authors recorded yet.</p>
-      )
-    }
+    <div class="panel" role="tabpanel" id="panel-authors" aria-labelledby="tab-authors" data-panel="authors" hidden>
+      {
+        authors.length > 0 ? (
+          <ol class="rows">
+            {authors.map((a) => (
+              <li class="row" title={`${a.name}: ${a.count}`}>
+                <span class="row-label">
+                  {site.features.author ? (
+                    <a class="row-name" href={`${base}/author/${a.slug}/`}>{a.name}</a>
+                  ) : (
+                    <span class="row-name">{a.name}</span>
+                  )}
+                  <span class="row-sub">{t.latest(panguSpace(a.latest))}</span>
+                </span>
+                <span class="row-track" aria-hidden="true">
+                  <span class="row-bar" style={`width:${(a.count / maxAuthor) * 100}%`} />
+                </span>
+                <span class="row-count">{t.entries(a.count)}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p class="note">{t.noAuthors}</p>
+        )
+      }
+      {withoutAuthor > 0 && authors.length > 0 && <p class="note">{t.noAuthor(withoutAuthor)}</p>}
+    </div>
   </section>
 </BaseLayout>
 
@@ -135,154 +142,179 @@ const maxAuthorCount = authors.length ? authors[0][1] : 0;
   (function () {
     const tabs = document.querySelector<HTMLElement>('[data-stats-tabs]');
     if (!tabs) return;
-    const buttons = Array.from(tabs.querySelectorAll<HTMLButtonElement>('.tab-btn'));
-    const panels = Array.from(document.querySelectorAll<HTMLElement>('.tab-panel'));
+    const buttons = Array.from(tabs.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const panels = Array.from(document.querySelectorAll<HTMLElement>('[data-panel]'));
 
-    function activate(name: string, { updateHash = true } = {}) {
-      buttons.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    function activate(name: string, { updateHash = true, focus = false } = {}) {
+      buttons.forEach((b) => {
+        const on = b.dataset.tab === name;
+        b.setAttribute('aria-selected', String(on));
+        b.tabIndex = on ? 0 : -1;
+        if (on && focus) b.focus();
+      });
       panels.forEach((p) => {
         p.hidden = p.dataset.panel !== name;
       });
       if (updateHash) {
         const url = new URL(window.location.href);
-        if (name === 'domains') {
-          url.hash = '';
-        } else {
-          url.hash = name;
-        }
+        url.hash = name === 'domains' ? '' : name;
         history.replaceState(null, '', url.toString());
       }
     }
 
-    buttons.forEach((btn) => {
+    buttons.forEach((btn, i) => {
       btn.addEventListener('click', () => activate(btn.dataset.tab!));
+      btn.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+        const next = buttons[(i + (event.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length];
+        activate(next.dataset.tab!, { focus: true });
+      });
     });
 
-    const initial = window.location.hash.replace('#', '');
-    if (initial === 'authors') {
+    if (window.location.hash.replace('#', '') === 'authors') {
       activate('authors', { updateHash: false });
     }
   })();
 </script>
 
 <style>
-  .hero {
-    max-width: var(--wide);
-    padding: 4.5rem 0 2.5rem;
+  .tiles {
+    margin: 3.5rem 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 0 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--font-sans);
   }
-  .hero-eyebrow {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-    margin: 0 0 1rem;
+  .tile {
+    padding-top: 1.25rem;
   }
-  .hero-title {
-    font-size: clamp(2rem, 1.6rem + 1.6vw, 2.75rem);
-    line-height: 1.1;
-    font-weight: 400;
+  .tile dt {
+    font-size: 0.8125rem;
+    color: var(--ink-3);
+  }
+  .tile dd {
+    margin: 0.375rem 0 0;
+    font-size: 2rem;
+    line-height: 1.2;
+    font-weight: 600;
     letter-spacing: -0.02em;
-    margin: 0;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .tile-unit {
+    margin-left: 4px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--ink-3);
   }
 
+  .breakdown {
+    max-width: 47.5rem;
+    margin-top: 4.5rem;
+    font-family: var(--font-sans);
+  }
   .tabs {
     display: flex;
-    gap: 0.5rem;
-    max-width: var(--wide);
-    border-bottom: 1px solid var(--line);
-    margin-bottom: 2rem;
+    gap: 1.5rem;
+    border-bottom: 1px solid var(--rule);
   }
-  .tab-btn {
-    appearance: none;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-    padding: 0.7rem 0.2rem;
+  .tab {
+    min-height: 44px;
     margin-bottom: -1px;
-    border-bottom: 2px solid transparent;
-    display: flex;
+    padding: 0;
+    display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--ink-3);
+    cursor: pointer;
   }
-  .tab-btn:hover {
+  .tab:hover {
     color: var(--ink);
   }
-  .tab-btn[aria-selected='true'] {
+  .tab[aria-selected='true'] {
     color: var(--ink);
-    border-bottom-color: var(--accent);
+    border-bottom-color: var(--ink);
   }
   .tab-count {
-    font-size: 0.7rem;
-    color: var(--ink-faint);
-    background: var(--paper-raised);
-    border-radius: 999px;
-    padding: 0.1rem 0.5rem;
-  }
-  .tab-btn[aria-selected='true'] .tab-count {
-    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
   }
 
-  .stats-table {
-    width: 100%;
-    max-width: var(--wide);
-    border-collapse: collapse;
-    margin-bottom: 3rem;
+  .rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
-  .stats-table tr {
-    border-bottom: 1px solid var(--line-soft);
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 13.75rem) minmax(0, 1fr) 3.5rem;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.875rem 0;
+    border-bottom: 1px solid var(--rule);
   }
-  .stats-table td {
-    padding: 0.55rem 0;
-    vertical-align: middle;
+  .row-label {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
-  .stats-domain {
-    font-size: 0.95rem;
+  .row-name {
+    overflow: hidden;
     white-space: nowrap;
-    padding-right: 1.5rem;
-    width: 1%;
-  }
-  .stats-domain a {
+    text-overflow: ellipsis;
+    font-size: 0.9375rem;
+    font-weight: 500;
     color: var(--ink);
     text-decoration: none;
   }
-  .stats-domain a:hover {
-    color: var(--accent);
+  a.row-name:hover {
+    text-decoration: underline;
   }
-  .stats-bar-cell {
-    width: 100%;
+  .row-sub {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 0.8125rem;
+    color: var(--ink-3);
   }
-  .stats-bar {
+  .row-track {
     display: block;
     height: 8px;
-    background: var(--accent-soft);
-    border-radius: 1px;
   }
-  .stats-count {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--ink-faint);
+  .row-bar {
+    display: block;
+    height: 8px;
+    border-radius: 0 4px 4px 0;
+    background: var(--ink-2);
+  }
+  .row-count {
+    font-size: 0.9375rem;
     text-align: right;
-    padding-left: 1.5rem;
-    width: 1%;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-
-  .stats-note {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--ink-faint);
-    padding-bottom: 4rem;
+  .note {
+    margin: 1.25rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--ink-3);
   }
-
   @media (max-width: 640px) {
-    .stats-domain {
-      font-size: 0.85rem;
+    .row {
+      grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) 3rem;
+      gap: 0.75rem;
     }
   }
 </style>

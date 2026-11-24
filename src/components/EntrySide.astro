@@ -1,0 +1,174 @@
+---
+// Right-hand rail shown next to an entry on wide screens: details, section list, source link.
+// Hidden below 1080px, where the same details sit above the title instead.
+import site from 'virtual:astro-reading-theme/config';
+import { base } from '../lib/base';
+import { t, formatDate } from '../lib/i18n';
+import { slugifyAuthor } from '../lib/author';
+import { isPrivateSourceDomain } from '../lib/domain';
+import { panguSpace } from '../lib/rehype-pangu.mjs';
+
+interface Props {
+  label: string;
+  date: Date;
+  minutes: number;
+  domain: string | null;
+  author?: string;
+  source?: string;
+  headings?: { depth: number; slug: string; text: string }[];
+  /** Prefix for section links: the permalink in a feed, '' on the post page. */
+  tocBase?: string;
+  /** Distance from the top of the entry to where the rail starts. */
+  offset?: string;
+}
+
+const { label, date, minutes, domain, author, source, headings = [], tocBase = '', offset } = Astro.props;
+const sections = headings.filter((h) => h.depth === 2);
+const showSource = Boolean(domain && source && !isPrivateSourceDomain(domain));
+---
+
+<aside class="entry-side" aria-label={label} style={offset ? `--side-offset: ${offset}` : undefined}>
+  <div class="side-inner">
+    <div class="side-block">
+      <dl class="side-dl">
+        {
+          domain && (
+            <>
+              <dt>{t.metaSource}</dt>
+              <dd>{site.features.domain ? <a class="side-plain" href={`${base}/domain/${domain}/`}>{domain}</a> : domain}</dd>
+            </>
+          )
+        }
+        {
+          author && (
+            <>
+              <dt>{t.metaAuthor}</dt>
+              <dd>
+                {site.features.author ? (
+                  <a class="side-plain" href={`${base}/author/${slugifyAuthor(author)}/`}>{author}</a>
+                ) : (
+                  author
+                )}
+              </dd>
+            </>
+          )
+        }
+        <dt>{t.metaLength}</dt>
+        <dd>{t.minutes(minutes)}</dd>
+        <dt>{t.metaSaved}</dt>
+        <dd>{formatDate(date)}</dd>
+      </dl>
+    </div>
+    {
+      sections.length > 0 && (
+        <nav class="side-block" aria-label={t.toc}>
+          <p class="side-label">{t.toc}</p>
+          <ol class="side-toc">
+            {sections.map((h) => (
+              <li>
+                <a class="side-link" href={`${tocBase}#${h.slug}`} data-toc-slug={h.slug}>
+                  {panguSpace(h.text)}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )
+    }
+    {
+      showSource && (
+        <div class="side-block">
+          <a class="side-out" href={source} target="_blank" rel="noopener noreferrer">
+            {t.readSource}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M7 17L17 7" />
+              <path d="M8 7h9v9" />
+            </svg>
+          </a>
+        </div>
+      )
+    }
+  </div>
+</aside>
+
+<style>
+  .entry-side {
+    display: none;
+    padding-top: var(--side-offset, 0);
+  }
+  @media (min-width: 1080px) {
+    .entry-side {
+      display: block;
+    }
+  }
+  .side-inner {
+    position: sticky;
+    top: var(--side-top, 8.5rem);
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    line-height: 20px;
+  }
+  .side-block {
+    padding: 1.25rem 0;
+    border-top: 1px solid var(--rule);
+  }
+  .side-block:first-child {
+    padding-top: 0.25rem;
+    border-top: 0;
+  }
+  .side-dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 16px;
+  }
+  .side-dl dt {
+    color: var(--ink-3);
+  }
+  .side-dl dd {
+    margin: 0;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .side-plain {
+    text-decoration: none;
+  }
+  .side-plain:hover {
+    text-decoration: underline;
+  }
+  .side-label {
+    margin: 0 0 6px;
+    font-size: 0.75rem;
+    color: var(--ink-3);
+  }
+  .side-toc {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .side-link {
+    display: block;
+    padding: 12px 0 12px 14px;
+    border-left: 1px solid var(--rule);
+    color: var(--ink-3);
+    text-decoration: none;
+  }
+  .side-link:hover {
+    color: var(--ink);
+  }
+  .side-link[aria-current='location'] {
+    color: var(--ink);
+    border-left-color: var(--ink);
+  }
+  .side-out {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 0;
+    color: var(--ink);
+  }
+  .side-out svg {
+    width: 13px;
+    height: 13px;
+  }
+</style>

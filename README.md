@@ -15,7 +15,7 @@ Sites keep only: `src/content/`, `src/content.config.ts`, `src/pages/about.astro
 ## Use in a site
 
 ```bash
-npm i github:jay1803/astro-reading-theme#v0.2.1
+npm i github:jay1803/astro-reading-theme#v0.3.0
 ```
 
 ```js
@@ -29,9 +29,10 @@ export default defineConfig({
   site: 'https://example.maxoxo.me',
   integrations: [
     readingTheme({
-      name: 'Example',
-      lang: 'en',                        // <html lang>
+      name: 'Example',                   // also the big home page title, one word per line
+      lang: 'en',                        // <html lang>; 'zh-CN' etc. switches UI labels to Chinese
       description: 'Home page description',
+      dek: ['Line one.', 'Line two.'],   // lines under the home page title; defaults to description
       tagline: 'every entry links back to its source', // footer
       nav: [{ label: 'About', href: '/about/' }],
       footerLink: { label: 'Archive', href: '/' },
@@ -95,6 +96,22 @@ cd ../some-site && npm install --no-save ../astro-reading-theme && npm run dev
 
 ## Changelog
 
+- 0.3.0: new default design (monochrome, sans-serif, left-aligned).
+  - Feed entries get a large entry number, a sticky side rail on wide screens (source, author, length,
+    saved date, section list, source link) and a second top-bar row that tracks the entry being read
+    and opens an index of loaded entries. Post pages number their `##` sections and get the same rail.
+  - Stats page: summary tiles, domain/author breakdown with share and latest title.
+  - New config: `dek`. UI labels follow `lang` (`zh*` → Chinese, otherwise English).
+  - The integration now appends `rehype-reading` to the site's rehype plugins: it marks bold runs that
+    open a line as labels (`strong.lead-in`, plain bold) so inline bold gets a highlight, keeps short
+    single-token table cells on one line, and wraps tables for horizontal scroll.
+  - No web fonts: Inter if installed, else the system UI font; Chinese uses PingFang / YaHei / Noto Sans.
+  - Removed the scroll-progress bar; the refresh button is an icon and its status is a transient toast.
+  - Upgrading a site: the old CSS variable names (`--paper`, `--accent`, `--ink-soft`, `--font-mono`, …)
+    still resolve, but overrides of `PostEntry`, `[...page]` or `[...slug]` keep the 0.2 markup and
+    should be compared against the new files. Sites that cache pages in a service worker should bump
+    the page cache name so readers get the new HTML. Locally, delete `node_modules/.astro` once so
+    Astro re-renders markdown with the new plugin.
 - 0.2.1: deterministic ordering (date ties broken by id; stats ties by name) via `lib/sort.ts`.
 - 0.2.0: `overrides` option; `features.browse` split into `category`/`author`/`domain`; `features.listen`;
   offline manifest follows `nav` instead of hard-coding `/stats/`.

@@ -1,8 +1,9 @@
 ---
 import PostEntry from './PostEntry.astro';
+import { t } from '../lib/i18n';
 
 interface Props {
-  entries: { post: any; Content: any; num: number }[];
+  entries: { post: any; Content: any; num: number; headings?: any[] }[];
   nextUrl?: string | null;
   total?: number;
 }
@@ -10,14 +11,17 @@ const { entries, nextUrl, total } = Astro.props;
 ---
 
 <div class="feed" data-feed data-next-url={nextUrl ?? ''}>
-  {entries.map(({ post, Content, num }) => <PostEntry post={post} Content={Content} num={num} />)}
+  {
+    entries.map(({ post, Content, num, headings }) => (
+      <PostEntry post={post} Content={Content} num={num} headings={headings} />
+    ))
+  }
 
   <div class="feed-sentinel" data-sentinel></div>
 
   <div class="feed-skeleton" data-skeleton hidden>
-    <div class="sk-line sk-eyebrow"></div>
+    <div class="sk-line sk-num"></div>
     <div class="sk-line sk-title"></div>
-    <div class="sk-line sk-title-short"></div>
     <div class="sk-line sk-body"></div>
     <div class="sk-line sk-body"></div>
     <div class="sk-line sk-body-short"></div>
@@ -26,112 +30,100 @@ const { entries, nextUrl, total } = Astro.props;
   {
     nextUrl ? (
       <a class="feed-more" data-more-link href={nextUrl}>
-        Load older entries
+        {t.loadMore}
       </a>
     ) : (
       <div class="feed-end" data-end-message>
-        <p class="feed-end-label">End of the archive</p>
-        <p class="feed-end-note">
-          {total ? total.toLocaleString() : 'All'} entries, all of them still here.
-        </p>
+        <p class="feed-end-label">{t.endLabel}</p>
+        <p class="feed-end-note">{total ? t.endNote(total) : ''}</p>
       </div>
     )
   }
 </div>
 
 <style>
-  .feed {
-    max-width: var(--measure);
+  .feed > :global(.entry:first-child) {
+    margin-top: 7.5rem;
   }
   .feed-sentinel {
     height: 1px;
   }
 
   .feed-skeleton {
-    padding: 0 0 5rem;
+    max-width: var(--measure);
+    margin-top: 11rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--rule-strong);
     animation: pulseFade 1.4s ease-in-out infinite;
   }
   .feed-skeleton[hidden] {
     display: none;
   }
   .sk-line {
-    background: var(--line-soft);
-    border-radius: 2px;
+    background: var(--surface);
+    border-radius: 4px;
   }
-  .sk-eyebrow {
-    height: 10px;
-    width: 160px;
-    margin-bottom: 1.6rem;
+  .sk-num {
+    height: 48px;
+    width: 96px;
+    margin-bottom: 1.25rem;
   }
   .sk-title {
-    height: 30px;
-    width: 82%;
-    margin-bottom: 0.9rem;
-  }
-  .sk-title-short {
-    height: 30px;
-    width: 52%;
-    margin-bottom: 2rem;
+    height: 26px;
+    width: 72%;
+    margin-bottom: 1.5rem;
   }
   .sk-body {
-    height: 12px;
+    height: 14px;
     margin-bottom: 0.9rem;
   }
   .sk-body-short {
-    height: 12px;
-    width: 68%;
+    height: 14px;
+    width: 64%;
   }
   @keyframes pulseFade {
     0%,
     100% {
-      opacity: 0.3;
+      opacity: 0.5;
     }
     50% {
-      opacity: 0.65;
+      opacity: 1;
     }
   }
 
   .feed-more {
-    display: inline-block;
-    margin: 0.5rem 0 6rem;
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
-    background: transparent;
-    border: 1px solid var(--accent-soft);
-    padding: 0.9rem 1.4rem;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin: 6rem 0 0;
+    padding: 0 1.125rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 8px;
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    color: var(--ink);
     text-decoration: none;
-    transition:
-      background 0.15s ease,
-      color 0.15s ease;
   }
   .feed-more:hover {
-    background: var(--accent);
-    color: var(--paper);
-    border-color: var(--accent);
+    background: var(--surface);
   }
 
   .feed-end {
-    padding: 0 0 6rem;
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
+    max-width: var(--measure);
+    margin-top: 6rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--font-sans);
   }
   .feed-end-label {
-    margin: 0 0 0.6rem;
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--ink-3);
   }
   .feed-end-note {
-    margin: 0;
-    text-transform: none;
-    letter-spacing: 0;
-    font-family: var(--font-display);
-    font-size: 1.05rem;
-    line-height: 1.6;
-    color: var(--ink-soft);
+    margin: 0.375rem 0 0;
+    font-size: 1rem;
+    color: var(--ink-2);
   }
 </style>
 
@@ -173,11 +165,12 @@ const { entries, nextUrl, total } = Astro.props;
         const nextFeed = doc.querySelector<HTMLElement>('[data-feed]');
         if (!nextFeed) throw new Error('no feed in response');
 
-        const entries = [...nextFeed.querySelectorAll(':scope > .entry')];
+        const entries = [...nextFeed.querySelectorAll<HTMLElement>(':scope > .entry')];
         entries.forEach((el) => {
           sentinel && feed.insertBefore(el, sentinel);
         });
         saveEntryPages(entries);
+        document.dispatchEvent(new CustomEvent('feed:append', { detail: { entries } }));
 
         nextUrl = nextFeed.dataset.nextUrl || '';
         feed.dataset.nextUrl = nextUrl;

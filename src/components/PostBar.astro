@@ -1,0 +1,116 @@
+---
+// Second row of the top bar on a post page (narrow screens only; wide screens use the
+// side rail): post number and title, the section being read, and an index of sections.
+import { panguSpace } from '../lib/rehype-pangu.mjs';
+import { t } from '../lib/i18n';
+
+interface Props {
+  num: string;
+  title: string;
+  sections: { slug: string; text: string }[];
+}
+const { num, title, sections } = Astro.props;
+---
+
+{
+  sections.length > 0 && (
+    <div class="subbar subbar--narrow" data-postbar data-intro={t.intro}>
+      <div class="subbar-inner">
+        <button type="button" class="subbar-btn" aria-expanded="false" aria-controls="section-index" data-bar-toggle>
+          <span class="subbar-badge">{num}</span>
+          <span class="subbar-title is-fixed">{panguSpace(title)}</span>
+          <span class="subbar-sep" aria-hidden="true">/</span>
+          <span class="subbar-sub" data-bar-sub>{t.intro}</span>
+          <span class="subbar-chev" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </span>
+        </button>
+      </div>
+      <div class="subbar-panel" id="section-index" hidden data-bar-panel>
+        <div class="subbar-panel-inner">
+          <p class="subbar-label">{t.sections(sections.length)}</p>
+          <ul class="idx-list" data-bar-list>
+            {sections.map((s, i) => (
+              <li>
+                <a class="idx-link" href={`#${s.slug}`} data-target={s.slug}>
+                  <span class="idx-num">{String(i + 1).padStart(2, '0')}</span>
+                  <span class="idx-title">{panguSpace(s.text)}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+<script>
+  const headings = Array.from(document.querySelectorAll<HTMLElement>('.post-body > h2[id]'));
+  const bar = document.querySelector<HTMLElement>('[data-postbar]');
+  const toggle = bar?.querySelector<HTMLButtonElement>('[data-bar-toggle]');
+  const panel = bar?.querySelector<HTMLElement>('[data-bar-panel]');
+  const sub = bar?.querySelector<HTMLElement>('[data-bar-sub]');
+
+  const setOpen = (open: boolean) => {
+    if (!toggle || !panel) return;
+    toggle.setAttribute('aria-expanded', String(open));
+    panel.hidden = !open;
+  };
+  toggle?.addEventListener('click', () => setOpen(Boolean(panel?.hidden)));
+  panel?.addEventListener('click', (event) => {
+    if ((event.target as Element).closest('a')) setOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && panel && !panel.hidden) {
+      setOpen(false);
+      toggle?.focus();
+    }
+  });
+  document.addEventListener('click', (event) => {
+    if (bar && panel && !panel.hidden && !bar.contains(event.target as Node)) setOpen(false);
+  });
+
+  let currentId: string | null = null;
+  const update = () => {
+    let active = '';
+    let label = bar?.dataset.intro ?? '';
+    for (const h of headings) {
+      if (h.getBoundingClientRect().top < 160) {
+        active = h.id;
+        label = h.textContent ?? '';
+      } else break;
+    }
+    if (active === currentId) return;
+    currentId = active;
+    if (sub) sub.textContent = label;
+    // Same highlight in the dropdown index and in the side rail.
+    document.querySelectorAll<HTMLAnchorElement>('[data-postbar] a[data-target]').forEach((a) => {
+      if (active && a.dataset.target === active) a.setAttribute('aria-current', 'true');
+      else a.removeAttribute('aria-current');
+    });
+    document.querySelectorAll<HTMLAnchorElement>('.entry-side a[data-toc-slug]').forEach((a) => {
+      if (active && a.dataset.tocSlug === active) a.setAttribute('aria-current', 'location');
+      else a.removeAttribute('aria-current');
+    });
+  };
+
+  if (headings.length) {
+    let ticking = false;
+    window.addEventListener(
+      'scroll',
+      () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          update();
+        });
+      },
+      { passive: true }
+    );
+    update();
+  }
+</script>
