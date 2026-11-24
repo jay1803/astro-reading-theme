@@ -1,3 +1,4 @@
+import { byDateDesc } from '../lib/sort';
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import site from 'virtual:astro-reading-theme/config';
@@ -8,7 +9,7 @@ const OFFLINE_POST_COUNT = 50;
 
 export const GET: APIRoute = async () => {
   const posts = (await getCollection('posts'))
-    .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+    .sort(byDateDesc)
     .slice(0, OFFLINE_POST_COUNT);
   const feedPages = Array.from(
     { length: Math.ceil(posts.length / FEED_PAGE_SIZE) - 1 },

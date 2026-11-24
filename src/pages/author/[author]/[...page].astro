@@ -1,4 +1,5 @@
 ---
+import { byDateDesc } from '../../../lib/sort';
 import site from 'virtual:astro-reading-theme/config';
 import { getCollection, render } from 'astro:content';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
@@ -19,7 +20,7 @@ export async function getStaticPaths({ paginate }) {
   }
   return [...byAuthor.entries()].flatMap(([author, authorPosts]) =>
     paginate(
-      authorPosts.sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf()),
+      authorPosts.sort(byDateDesc),
       { params: { author }, pageSize: 12, props: { displayName: displayNames.get(author) } }
     )
   );

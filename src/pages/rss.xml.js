@@ -1,3 +1,4 @@
+import { byDateDesc } from '../lib/sort';
 import site from 'virtual:astro-reading-theme/config';
 import rss from '@astrojs/rss';
 import { getCollection } from 'astro:content';
@@ -7,7 +8,7 @@ const FEED_LIMIT = 100;
 
 export async function GET(context) {
   const posts = (await getCollection('posts'))
-    .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+    .sort(byDateDesc)
     .slice(0, FEED_LIMIT);
 
   return rss({

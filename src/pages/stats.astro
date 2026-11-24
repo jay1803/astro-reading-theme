@@ -23,7 +23,7 @@ for (const post of posts) {
   counts.set(domain, (counts.get(domain) ?? 0) + 1);
 }
 
-const domains = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+const domains = [...counts.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
 const maxCount = domains.length ? domains[0][1] : 0;
 
 const authorCounts = new Map<string, number>();
@@ -45,7 +45,7 @@ for (const post of posts) {
 
 const authors = [...authorCounts.entries()]
   .map(([slug, count]) => [authorNames.get(slug)!, count, slug] as const)
-  .sort((a, b) => b[1] - a[1]);
+  .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
 const maxAuthorCount = authors.length ? authors[0][1] : 0;
 ---
 

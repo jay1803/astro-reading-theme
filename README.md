@@ -15,7 +15,7 @@ Sites keep only: `src/content/`, `src/content.config.ts`, `src/pages/about.astro
 ## Use in a site
 
 ```bash
-npm i github:jay1803/astro-reading-theme#v0.2.0
+npm i github:jay1803/astro-reading-theme#v0.2.1
 ```
 
 ```js
@@ -95,6 +95,7 @@ cd ../some-site && npm install --no-save ../astro-reading-theme && npm run dev
 
 ## Changelog
 
+- 0.2.1: deterministic ordering (date ties broken by id; stats ties by name) via `lib/sort.ts`.
 - 0.2.0: `overrides` option; `features.browse` split into `category`/`author`/`domain`; `features.listen`;
   offline manifest follows `nav` instead of hard-coding `/stats/`.
 - 0.1.0: initial extraction.
