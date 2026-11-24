@@ -15,7 +15,7 @@ Sites keep only: `src/content/`, `src/content.config.ts`, `src/pages/about.astro
 ## Use in a site
 
 ```bash
-npm i github:jay1803/astro-reading-theme#v0.3.0
+npm i github:jay1803/astro-reading-theme#v0.3.1
 ```
 
 ```js

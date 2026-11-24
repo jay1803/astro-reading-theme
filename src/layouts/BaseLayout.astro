@@ -783,7 +783,9 @@ const isCurrent = (href: string) => {
     content: counter(item);
     position: absolute;
     left: 0;
-    top: calc(0.95em - 9px);
+    /* Centre on the first text line (half of .prose line-height 1.9 × 1.0625rem). Not `em`:
+       this pseudo-element sets its own 11px font-size, so `em` would be 11px, not the body's. */
+    top: calc(1.0625rem * 0.95 - 9px);
     width: 18px;
     height: 18px;
     border: 1px solid var(--rule-strong);
