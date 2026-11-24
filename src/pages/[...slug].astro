@@ -38,7 +38,7 @@ const showDek =
     </div>
     <h1 class="entry-title">{panguSpace(post.data.title)}</h1>
     {showDek && <p class="entry-dek">{panguSpace(post.data.description)}</p>}
-    <ListenButton />
+    {site.features.listen && <ListenButton />}
     <div class="prose">
       <Content />
     </div>

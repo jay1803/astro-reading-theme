@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
+import site from 'virtual:astro-reading-theme/config';
 import { base } from '../lib/base';
 import { FEED_PAGE_SIZE } from '../lib/feed';
 
@@ -19,8 +20,7 @@ export const GET: APIRoute = async () => {
       count: posts.length,
       pages: [
         `${base}/`,
-        `${base}/stats/`,
-        `${base}/about/`,
+        ...site.nav.map((item) => `${base}${item.href}`),
         ...feedPages,
         ...posts.map((post) => `${base}/${post.id}/`),
       ],
