@@ -1,0 +1,42 @@
+{
+  "schema": "agent-repo-template/v1",
+  "version": "1.1.0",
+  "source": "jay1803/agent-repo-template",
+  "files": [
+    {
+      "source": "AGENTS.md",
+      "target": "AGENTS.md",
+      "module": "core"
+    },
+    {
+      "source": ".template/modules/development.md",
+      "target": ".agents/policies/development.md",
+      "module": "development"
+    },
+    {
+      "source": ".template/modules/coding.md",
+      "target": ".agents/policies/coding.md",
+      "module": "coding"
+    },
+    {
+      "source": ".template/modules/validation.md",
+      "target": ".agents/policies/validation.md",
+      "module": "validation"
+    },
+    {
+      "source": ".template/modules/skills.md",
+      "target": ".agents/policies/skills.md",
+      "module": "skills"
+    },
+    {
+      "source": ".template/modules/release.yaml",
+      "target": ".agents/policies/release.yaml",
+      "module": "release"
+    },
+    {
+      "source": ".template/modules/release.md",
+      "target": ".agents/runbooks/release.md",
+      "module": "release-runbook"
+    }
+  ]
+}

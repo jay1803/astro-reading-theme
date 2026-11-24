@@ -1,0 +1,10 @@
+schema: release-policy/v1
+promotion:
+  source: develop
+  target: main
+  pull_request: required
+  merge:
+    executor: human
+    agent_authorization: not-applicable
+    auto_merge: forbidden
+    method: repository-default
