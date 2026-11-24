@@ -1,0 +1,288 @@
+---
+import site from 'virtual:astro-reading-theme/config';
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { base } from '../lib/base';
+import { getDomain } from '../lib/domain';
+import { slugifyAuthor } from '../lib/author';
+
+const posts = await getCollection('posts');
+
+const counts = new Map<string, number>();
+let withoutSource = 0;
+for (const post of posts) {
+  if (!post.data.source) {
+    withoutSource++;
+    continue;
+  }
+  const domain = getDomain(post.data.source);
+  if (!domain) {
+    withoutSource++;
+    continue;
+  }
+  counts.set(domain, (counts.get(domain) ?? 0) + 1);
+}
+
+const domains = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+const maxCount = domains.length ? domains[0][1] : 0;
+
+const authorCounts = new Map<string, number>();
+const authorNames = new Map<string, string>();
+let withoutAuthor = 0;
+for (const post of posts) {
+  if (!post.data.author) {
+    withoutAuthor++;
+    continue;
+  }
+  const slug = slugifyAuthor(post.data.author);
+  if (!slug) {
+    withoutAuthor++;
+    continue;
+  }
+  authorCounts.set(slug, (authorCounts.get(slug) ?? 0) + 1);
+  if (!authorNames.has(slug)) authorNames.set(slug, post.data.author);
+}
+
+const authors = [...authorCounts.entries()]
+  .map(([slug, count]) => [authorNames.get(slug)!, count, slug] as const)
+  .sort((a, b) => b[1] - a[1]);
+const maxAuthorCount = authors.length ? authors[0][1] : 0;
+---
+
+<BaseLayout title={`Stats — ${site.name}`} description="How many entries came from which domain and which author.">
+  <div class="hero">
+    <p class="hero-eyebrow">
+      {posts.length.toLocaleString()} entries &nbsp;&middot;&nbsp; {domains.length.toLocaleString()} domains &nbsp;&middot;&nbsp; {authors.length.toLocaleString()} authors
+    </p>
+    <h1 class="hero-title">Where it's all from</h1>
+  </div>
+
+  <div class="tabs" role="tablist" data-stats-tabs>
+    <button type="button" role="tab" class="tab-btn" data-tab="domains" aria-selected="true">
+      Domains <span class="tab-count">{domains.length.toLocaleString()}</span>
+    </button>
+    <button type="button" role="tab" class="tab-btn" data-tab="authors" aria-selected="false">
+      Authors <span class="tab-count">{authors.length.toLocaleString()}</span>
+    </button>
+  </div>
+
+  <section class="tab-panel" id="panel-domains" data-panel="domains">
+    <table class="stats-table">
+      <tbody>
+        {
+          domains.map(([domain, count]) => (
+            <tr>
+              <td class="stats-domain">
+                <a href={`${base}/domain/${domain}/`}>{domain}</a>
+              </td>
+              <td class="stats-bar-cell">
+                <span class="stats-bar" style={`width:${(count / maxCount) * 100}%`} />
+              </td>
+              <td class="stats-count">{count.toLocaleString()}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+
+    {
+      withoutSource > 0 && (
+        <p class="stats-note">
+          {withoutSource.toLocaleString()} entries have no recorded source domain.
+        </p>
+      )
+    }
+  </section>
+
+  <section class="tab-panel" id="panel-authors" data-panel="authors" hidden>
+    {
+      authors.length > 0 ? (
+        <>
+          <table class="stats-table">
+            <tbody>
+              {
+                authors.map(([name, count, slug]) => (
+                  <tr>
+                    <td class="stats-domain">
+                      <a href={`${base}/author/${slug}/`}>{name}</a>
+                    </td>
+                    <td class="stats-bar-cell">
+                      <span class="stats-bar" style={`width:${(count / maxAuthorCount) * 100}%`} />
+                    </td>
+                    <td class="stats-count">{count.toLocaleString()}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+
+          {
+            withoutAuthor > 0 && (
+              <p class="stats-note">
+                {withoutAuthor.toLocaleString()} entries have no recorded author.
+              </p>
+            )
+          }
+        </>
+      ) : (
+        <p class="stats-note">No authors recorded yet.</p>
+      )
+    }
+  </section>
+</BaseLayout>
+
+<script>
+  (function () {
+    const tabs = document.querySelector<HTMLElement>('[data-stats-tabs]');
+    if (!tabs) return;
+    const buttons = Array.from(tabs.querySelectorAll<HTMLButtonElement>('.tab-btn'));
+    const panels = Array.from(document.querySelectorAll<HTMLElement>('.tab-panel'));
+
+    function activate(name: string, { updateHash = true } = {}) {
+      buttons.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+      panels.forEach((p) => {
+        p.hidden = p.dataset.panel !== name;
+      });
+      if (updateHash) {
+        const url = new URL(window.location.href);
+        if (name === 'domains') {
+          url.hash = '';
+        } else {
+          url.hash = name;
+        }
+        history.replaceState(null, '', url.toString());
+      }
+    }
+
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => activate(btn.dataset.tab!));
+    });
+
+    const initial = window.location.hash.replace('#', '');
+    if (initial === 'authors') {
+      activate('authors', { updateHash: false });
+    }
+  })();
+</script>
+
+<style>
+  .hero {
+    max-width: var(--wide);
+    padding: 4.5rem 0 2.5rem;
+  }
+  .hero-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1rem;
+  }
+  .hero-title {
+    font-size: clamp(2rem, 1.6rem + 1.6vw, 2.75rem);
+    line-height: 1.1;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0.5rem;
+    max-width: var(--wide);
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 2rem;
+  }
+  .tab-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 0.7rem 0.2rem;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .tab-btn:hover {
+    color: var(--ink);
+  }
+  .tab-btn[aria-selected='true'] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+  .tab-count {
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+    background: var(--paper-raised);
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+  }
+  .tab-btn[aria-selected='true'] .tab-count {
+    color: var(--accent);
+  }
+
+  .stats-table {
+    width: 100%;
+    max-width: var(--wide);
+    border-collapse: collapse;
+    margin-bottom: 3rem;
+  }
+  .stats-table tr {
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .stats-table td {
+    padding: 0.55rem 0;
+    vertical-align: middle;
+  }
+  .stats-domain {
+    font-size: 0.95rem;
+    white-space: nowrap;
+    padding-right: 1.5rem;
+    width: 1%;
+  }
+  .stats-domain a {
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .stats-domain a:hover {
+    color: var(--accent);
+  }
+  .stats-bar-cell {
+    width: 100%;
+  }
+  .stats-bar {
+    display: block;
+    height: 8px;
+    background: var(--accent-soft);
+    border-radius: 1px;
+  }
+  .stats-count {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    text-align: right;
+    padding-left: 1.5rem;
+    width: 1%;
+    white-space: nowrap;
+  }
+
+  .stats-note {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+    padding-bottom: 4rem;
+  }
+
+  @media (max-width: 640px) {
+    .stats-domain {
+      font-size: 0.85rem;
+    }
+  }
+</style>

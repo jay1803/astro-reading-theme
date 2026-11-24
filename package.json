@@ -1,0 +1,29 @@
+{
+  "name": "astro-reading-theme",
+  "version": "0.1.0",
+  "description": "Shared Astro theme for personal reading-log sites (reading, oddly, agent-learning).",
+  "type": "module",
+  "license": "ISC",
+  "exports": {
+    ".": "./index.mjs",
+    "./lib/*": "./src/lib/*",
+    "./components/*": "./src/components/*",
+    "./layouts/*": "./src/layouts/*",
+    "./rehype-pangu": "./src/lib/rehype-pangu.mjs",
+    "./virtual": {
+      "types": "./virtual.d.ts"
+    }
+  },
+  "files": [
+    "index.mjs",
+    "src",
+    "virtual.d.ts"
+  ],
+  "peerDependencies": {
+    "astro": "^5.18.2"
+  },
+  "dependencies": {
+    "@astrojs/rss": "^4.0.19",
+    "remark-gfm": "^4.0.1"
+  }
+}

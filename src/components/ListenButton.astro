@@ -1,0 +1,177 @@
+---
+// Read-aloud player built on the browser's Web Speech API (free, no backend).
+// In Edge this exposes Microsoft "Natural" neural voices; Safari/Chrome use system voices.
+---
+
+<div class="listen" data-listen hidden>
+  <button type="button" class="listen-btn" data-listen-toggle aria-label="Listen to this article">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true" data-icon-play><path d="M7 4.5v15l12-7.5z" /></svg>
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true" data-icon-pause hidden><path d="M6 4.5h4v15H6zM14 4.5h4v15h-4z" /></svg>
+    <span data-listen-label>Listen</span>
+  </button>
+  <button type="button" class="listen-aux" data-listen-stop hidden aria-label="Stop">Stop</button>
+  <select class="listen-aux" data-listen-rate aria-label="Speech speed" hidden>
+    <option value="0.85">0.85×</option>
+    <option value="1" selected>1×</option>
+    <option value="1.25">1.25×</option>
+    <option value="1.5">1.5×</option>
+    <option value="2">2×</option>
+  </select>
+</div>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-listen]');
+  const synth = window.speechSynthesis;
+
+  if (root && synth && 'SpeechSynthesisUtterance' in window) {
+    root.hidden = false;
+    const toggle = root.querySelector<HTMLButtonElement>('[data-listen-toggle]')!;
+    const stopBtn = root.querySelector<HTMLButtonElement>('[data-listen-stop]')!;
+    const rateSel = root.querySelector<HTMLSelectElement>('[data-listen-rate]')!;
+    const label = root.querySelector<HTMLElement>('[data-listen-label]')!;
+    const iconPlay = root.querySelector<SVGElement>('[data-icon-play]')!;
+    const iconPause = root.querySelector<SVGElement>('[data-icon-pause]')!;
+
+    const article = document.querySelector('.single-entry');
+    const blocks = Array.from(
+      article?.querySelectorAll<HTMLElement>('.entry-title, .entry-dek, .prose p, .prose h2, .prose h3, .prose h4, .prose li') ?? [],
+    ).filter((el) => (el.textContent ?? '').trim().length > 0);
+
+    let voices: SpeechSynthesisVoice[] = [];
+    const loadVoices = () => (voices = synth.getVoices());
+    loadVoices();
+    synth.addEventListener?.('voiceschanged', loadVoices);
+
+    const isCJK = (s: string) => {
+      const cjk = (s.match(/[\u3400-\u9fff]/g) ?? []).length;
+      return cjk / Math.max(s.length, 1) > 0.15;
+    };
+
+    // Prefer neural/"Natural"/"Online" voices (Edge/Microsoft), then any matching language.
+    const pickVoice = (lang: 'zh' | 'en') => {
+      const matches = voices.filter((v) => v.lang.toLowerCase().startsWith(lang));
+      const score = (v: SpeechSynthesisVoice) =>
+        (/natural|neural|online/i.test(v.name) ? 4 : 0) +
+        (/microsoft|premium|enhanced/i.test(v.name) ? 2 : 0) +
+        (lang === 'zh' && /cn|zh-cn/i.test(v.lang) ? 1 : 0) +
+        (lang === 'en' && /us/i.test(v.lang) ? 1 : 0);
+      return matches.sort((a, b) => score(b) - score(a))[0];
+    };
+
+    let index = 0;
+    let state: 'idle' | 'playing' | 'paused' = 'idle';
+    let current: HTMLElement | null = null;
+
+    const setUI = () => {
+      const playing = state === 'playing';
+      iconPlay.hidden = playing;
+      iconPause.hidden = !playing;
+      label.textContent = state === 'idle' ? 'Listen' : playing ? 'Pause' : 'Resume';
+      stopBtn.hidden = rateSel.hidden = state === 'idle';
+    };
+
+    const mark = (el: HTMLElement | null) => {
+      current?.classList.remove('is-speaking');
+      current = el;
+      if (el) {
+        el.classList.add('is-speaking');
+        const r = el.getBoundingClientRect();
+        if (r.top < 80 || r.bottom > window.innerHeight - 80) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    };
+
+    const speak = () => {
+      if (state !== 'playing' || index >= blocks.length) return finish();
+      const el = blocks[index];
+      const text = (el.textContent ?? '').trim();
+      const u = new SpeechSynthesisUtterance(text);
+      const lang = isCJK(text) ? 'zh' : 'en';
+      u.lang = lang === 'zh' ? 'zh-CN' : 'en-US';
+      const v = pickVoice(lang);
+      if (v) u.voice = v;
+      u.rate = parseFloat(rateSel.value);
+      u.onend = () => {
+        if (state === 'playing') {
+          index++;
+          speak();
+        }
+      };
+      u.onerror = (e) => {
+        if (e.error === 'interrupted' || e.error === 'canceled') return;
+        finish();
+      };
+      mark(el);
+      synth.speak(u);
+    };
+
+    const finish = () => {
+      synth.cancel();
+      state = 'idle';
+      index = 0;
+      mark(null);
+      setUI();
+    };
+
+    toggle.addEventListener('click', () => {
+      if (state === 'idle') {
+        state = 'playing';
+        setUI();
+        speak();
+      } else if (state === 'playing') {
+        synth.pause();
+        state = 'paused';
+        setUI();
+      } else {
+        synth.resume();
+        state = 'playing';
+        setUI();
+      }
+    });
+    stopBtn.addEventListener('click', finish);
+    // Changing speed restarts the current paragraph at the new rate.
+    rateSel.addEventListener('change', () => {
+      if (state === 'idle') return;
+      synth.cancel();
+      state = 'playing';
+      setUI();
+      speak();
+    });
+    window.addEventListener('pagehide', () => synth.cancel());
+  }
+</script>
+
+<style>
+  .listen {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0 0 1.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .listen[hidden] { display: none; }
+  .listen-btn,
+  .listen-aux {
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: var(--ink-soft);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.4rem 0.85rem;
+    cursor: pointer;
+  }
+  .listen-btn { display: inline-flex; align-items: center; gap: 0.45rem; }
+  .listen-btn:hover,
+  .listen-aux:hover { color: var(--accent); border-color: var(--accent); }
+  .listen-btn[hidden], .listen-aux[hidden], svg[hidden] { display: none; }
+
+  :global(.is-speaking) {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-radius: 3px;
+    box-decoration-break: clone;
+  }
+</style>

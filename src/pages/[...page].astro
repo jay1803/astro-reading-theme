@@ -1,0 +1,82 @@
+---
+import site from 'virtual:astro-reading-theme/config';
+import { getCollection, render } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import InfiniteFeed from '../components/InfiniteFeed.astro';
+import { FEED_PAGE_SIZE } from '../lib/feed';
+
+export async function getStaticPaths({ paginate }) {
+  const posts = (await getCollection('posts')).sort(
+    (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
+  );
+  return paginate(posts, { pageSize: FEED_PAGE_SIZE });
+}
+
+const { page } = Astro.props;
+const entries = await Promise.all(
+  page.data.map(async (post, i) => ({
+    post,
+    Content: (await render(post)).Content,
+    num: page.total - (page.start + i),
+  }))
+);
+
+const allPosts = await getCollection('posts');
+const earliestYear = Math.min(...allPosts.map((p) => p.data.date.getUTCFullYear()));
+---
+
+<BaseLayout title={site.name} description={site.description}>
+  {
+    page.currentPage === 1 && (
+      <div class="hero">
+        <p class="hero-eyebrow">
+          {page.total.toLocaleString()} entries &nbsp;&middot;&nbsp; since {earliestYear}
+        </p>
+        <h1 class="hero-title">Max 每天在读的一些东西。</h1>
+        <p class="hero-dek">
+          没有算法，只有个人偏好。
+        </p>
+      </div>
+    )
+  }
+  <InfiniteFeed entries={entries} nextUrl={page.url.next} total={page.total} />
+</BaseLayout>
+
+<style>
+  .hero {
+    max-width: var(--measure);
+    padding: 4.5rem 0 0.5rem;
+  }
+  .hero-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1.5rem;
+  }
+  .hero-title {
+    font-size: clamp(2.25rem, 1.8rem + 2vw, 3.25rem);
+    line-height: 1.08;
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    margin: 0 0 1.25rem;
+    text-wrap: balance;
+  }
+  .hero-dek {
+    font-size: 1.2rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin: 0 0 4rem;
+    max-width: 50ch;
+    text-wrap: pretty;
+  }
+  @media (max-width: 640px) {
+    .hero {
+      padding-top: 3rem;
+    }
+    .hero-dek {
+      margin-bottom: 3rem;
+    }
+  }
+</style>

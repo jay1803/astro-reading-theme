@@ -1,0 +1,169 @@
+---
+import { base } from '../lib/base';
+import { estimateReadingTime } from '../lib/readingTime';
+import { getDomain, isPrivateSourceDomain } from '../lib/domain';
+import { slugifyAuthor } from '../lib/author';
+import { panguSpace } from '../lib/rehype-pangu.mjs';
+
+interface Props {
+  post: {
+    id: string;
+    data: { title: string; date: Date; category: string; description?: string; source?: string; author?: string };
+  };
+  Content: any;
+  num: number;
+}
+const { post, Content, num } = Astro.props;
+const d = post.data.date;
+const dateLabel = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+const readingTime = estimateReadingTime(post.id);
+const domain = post.data.source ? getDomain(post.data.source) : null;
+---
+
+<article class="entry">
+  <div class="entry-eyebrow">
+    <span class="entry-num">{String(num).padStart(4, '0')}</span>
+    <span>{dateLabel}</span>
+    <span class="dot-rule"></span>
+    <span>{readingTime}</span>
+  </div>
+
+  <h2 class="entry-title"><a href={`${base}/${post.id}/`}>{panguSpace(post.data.title)}</a></h2>
+
+  <div class="prose entry-content">
+    <Content />
+  </div>
+
+  <footer class="entry-foot">
+    <span class="entry-tags">
+      {
+        domain && (
+          <a href={`${base}/domain/${domain}/`}>{domain}</a>
+        )
+      }
+      {
+        post.data.author && (
+          <>
+            {domain && <span aria-hidden="true">&middot;</span>}
+            <a href={`${base}/author/${slugifyAuthor(post.data.author)}/`}>By {post.data.author}</a>
+          </>
+        )
+      }
+      {
+        domain && !isPrivateSourceDomain(domain) && (
+          <>
+            <span aria-hidden="true">&middot;</span>
+            <a href={post.data.source} target="_blank" rel="noopener noreferrer">
+              Source ↗
+            </a>
+          </>
+        )
+      }
+    </span>
+    <a class="permalink" href={`${base}/${post.id}/`}>Permalink</a>
+  </footer>
+
+  <div class="entry-divider" aria-hidden="true">
+    <span class="divider-rule"></span>
+    <span class="divider-dots">&middot;&middot;&middot;</span>
+    <span class="divider-rule"></span>
+  </div>
+</article>
+
+<style>
+  .entry {
+    max-width: var(--measure);
+    padding-bottom: 0.875rem;
+  }
+
+  .entry-eyebrow {
+    display: flex;
+    align-items: baseline;
+    gap: 0.875rem;
+    flex-wrap: wrap;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 1.25rem;
+  }
+  .entry-num {
+    color: var(--accent);
+  }
+  .dot-rule {
+    width: 14px;
+    height: 1px;
+    background: var(--line);
+  }
+
+  .entry-title {
+    font-size: clamp(1.65rem, 1.4rem + 1vw, 2.25rem);
+    line-height: 1.15;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin: 0 0 1.1rem;
+    text-wrap: balance;
+  }
+  .entry-title a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .entry-title a:hover {
+    color: var(--accent);
+  }
+
+  .entry-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin: 3rem 0 0;
+    padding-top: 1.35rem;
+    border-top: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .entry-tags {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .entry-tags a,
+  .permalink {
+    color: var(--ink-soft);
+    text-decoration: none;
+  }
+  .permalink {
+    color: var(--accent);
+    border-bottom: 1px solid var(--accent-soft);
+    padding-bottom: 2px;
+  }
+  .entry-tags a:hover,
+  .permalink:hover {
+    color: var(--ink);
+    border-color: var(--ink);
+  }
+
+  .entry-divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 4.5rem 0 5.25rem;
+    color: var(--ink-faint);
+  }
+  .divider-rule {
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+  .divider-dots {
+    font-size: 0.68rem;
+    letter-spacing: 0.5em;
+    color: var(--ink-faint);
+  }
+</style>

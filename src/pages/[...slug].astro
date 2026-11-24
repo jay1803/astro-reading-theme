@@ -1,0 +1,153 @@
+---
+import site from 'virtual:astro-reading-theme/config';
+import { getCollection, render } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ListenButton from '../components/ListenButton.astro';
+import { base } from '../lib/base';
+import { estimateReadingTime } from '../lib/readingTime';
+import { getDomain, isPrivateSourceDomain } from '../lib/domain';
+import { slugifyAuthor } from '../lib/author';
+import { panguSpace } from '../lib/rehype-pangu.mjs';
+import { isDekRedundant } from '../lib/dedupeDek';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts');
+  return posts.map((post) => ({
+    params: { slug: post.id },
+    props: { post },
+  }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const d = post.data.date;
+const dateLabel = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+const readingTime = estimateReadingTime(post.id);
+const domain = post.data.source ? getDomain(post.data.source) : null;
+const showDek =
+  post.data.description && !isDekRedundant(post.id, post.data.description);
+---
+
+<BaseLayout title={`${post.data.title} — ${site.name}`} description={post.data.description}>
+  <a class="back-link" href={`${base}/`}>&larr; Back to the archive</a>
+  <article class="single-entry">
+    <div class="entry-eyebrow">
+      <span>{dateLabel}</span>
+      <span class="dot-rule"></span>
+      <span>{readingTime}</span>
+    </div>
+    <h1 class="entry-title">{panguSpace(post.data.title)}</h1>
+    {showDek && <p class="entry-dek">{panguSpace(post.data.description)}</p>}
+    <ListenButton />
+    <div class="prose">
+      <Content />
+    </div>
+    <footer class="entry-foot">
+      <span class="entry-tags">
+        {
+          domain && (
+            <a href={`${base}/domain/${domain}/`}>{domain}</a>
+          )
+        }
+        {
+          post.data.author && (
+            <>
+              {domain && <span aria-hidden="true">&middot;</span>}
+              <a href={`${base}/author/${slugifyAuthor(post.data.author)}/`}>By {post.data.author}</a>
+            </>
+          )
+        }
+        {
+          domain && !isPrivateSourceDomain(domain) && (
+            <>
+              <span aria-hidden="true">&middot;</span>
+              <a href={post.data.source} target="_blank" rel="noopener noreferrer">
+                Source ↗
+              </a>
+            </>
+          )
+        }
+      </span>
+    </footer>
+  </article>
+</BaseLayout>
+
+<style>
+  .back-link {
+    display: inline-block;
+    margin: 2rem 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    text-decoration: none;
+  }
+  .back-link:hover {
+    color: var(--accent);
+  }
+
+  .single-entry {
+    max-width: var(--measure);
+    padding: 2.5rem 0 6rem;
+  }
+
+  .entry-eyebrow {
+    display: flex;
+    align-items: baseline;
+    gap: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 1.5rem;
+  }
+  .dot-rule {
+    width: 14px;
+    height: 1px;
+    background: var(--line);
+  }
+
+  .entry-title {
+    font-size: clamp(2rem, 1.6rem + 1.8vw, 3rem);
+    line-height: 1.12;
+    font-weight: 400;
+    letter-spacing: -0.022em;
+    margin: 0 0 1.1rem;
+    text-wrap: balance;
+  }
+
+  .entry-dek {
+    font-size: 1.2rem;
+    line-height: 1.6;
+    font-style: italic;
+    font-family: var(--font-em);
+    color: var(--ink-soft);
+    margin: 0 0 2.5rem;
+    text-wrap: pretty;
+  }
+
+  .entry-foot {
+    margin: 3rem 0 0;
+    padding-top: 1.35rem;
+    border-top: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .entry-tags {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .entry-tags a {
+    color: var(--ink-soft);
+    text-decoration: none;
+  }
+  .entry-tags a:hover {
+    color: var(--ink);
+  }
+</style>
