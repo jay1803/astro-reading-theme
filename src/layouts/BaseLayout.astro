@@ -44,6 +44,22 @@ const isCurrent = (href: string) => {
         } catch (e) {}
       })();
     </script>
+    {
+      site.features.feedback && (
+        <script is:inline data-cfasync="false">
+          (function () {
+            // Owner vote token: capture `#vote-token=...` on ANY page (not just posts), then strip it.
+            try {
+              var m = location.hash.match(/vote-token=([^&]*)/);
+              if (!m) return;
+              if (m[1]) localStorage.setItem('reading-vote-token', decodeURIComponent(m[1]));
+              else localStorage.removeItem('reading-vote-token');
+              history.replaceState(null, '', location.pathname + location.search);
+            } catch (e) {}
+          })();
+        </script>
+      )
+    }
   </head>
   <body>
     <a class="skip-link" href="#main">{t.skip}</a>
