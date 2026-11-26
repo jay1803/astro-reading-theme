@@ -57,6 +57,28 @@ const isCurrent = (href: string) => {
               history.replaceState(null, '', location.pathname + location.search);
             } catch (e) {}
           })();
+          // Installed PWAs (esp. iOS) have their own storage and no address bar:
+          // triple-tap the footer site name to paste/clear the vote token.
+          document.addEventListener('DOMContentLoaded', function () {
+            var el = document.querySelector('[data-owner-tap]');
+            if (!el) return;
+            var n = 0, timer;
+            el.addEventListener('click', function () {
+              n++;
+              clearTimeout(timer);
+              timer = setTimeout(function () { n = 0; }, 600);
+              if (n < 3) return;
+              n = 0;
+              var cur = localStorage.getItem('reading-vote-token');
+              var v = prompt(cur ? '已设置投票 token。粘贴新 token 替换，或清空后确定以移除：' : '粘贴投票 token：', '');
+              if (v === null) return;
+              v = v.trim();
+              if (v) localStorage.setItem('reading-vote-token', v);
+              else localStorage.removeItem('reading-vote-token');
+              alert(v ? '已保存，刷新文章页即可看到 👍/👎' : '已移除');
+              location.reload();
+            });
+          });
         </script>
       )
     }
@@ -122,7 +144,7 @@ const isCurrent = (href: string) => {
 
     <footer class="colophon">
       <div class="colophon-inner">
-        <span>{site.name} &nbsp;&middot;&nbsp; {site.tagline}</span>
+        <span data-owner-tap>{site.name} &nbsp;&middot;&nbsp; {site.tagline}</span>
         <span>
           {t.creditBefore}<a href="https://maxoxo.me" target="_blank" rel="noopener noreferrer">Max</a>{t.creditAfter}
         </span>
