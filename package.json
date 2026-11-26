@@ -1,6 +1,6 @@
 {
   "name": "astro-reading-theme",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Shared Astro theme for personal reading-log sites (reading, oddly, agent-learning).",
   "type": "module",
   "license": "ISC",
