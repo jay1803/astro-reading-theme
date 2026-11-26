@@ -1,0 +1,162 @@
+---
+// Owner-only 👍/👎 feedback for the curating agent. Hidden for everyone except a
+// browser that holds the vote token (set once by visiting any page with
+// `#vote-token=<token>`; clear with `#vote-token=`). Backed by the site's
+// `/api/vote` endpoint (Cloudflare Pages Function + D1, lives in the site repo).
+interface Props {
+  slug: string;
+  title: string;
+  source?: string;
+  domain?: string | null;
+  author?: string;
+  category?: string;
+  description?: string;
+}
+const p = Astro.props;
+---
+
+<div
+  class="feedback"
+  data-feedback
+  hidden
+  data-slug={p.slug}
+  data-title={p.title}
+  data-source={p.source ?? ''}
+  data-domain={p.domain ?? ''}
+  data-author={p.author ?? ''}
+  data-category={p.category ?? ''}
+  data-description={p.description ?? ''}
+>
+  <span class="feedback-label">这篇推荐得怎么样？</span>
+  <button type="button" class="feedback-btn" data-vote="1" aria-pressed="false" aria-label="赞">👍</button>
+  <button type="button" class="feedback-btn" data-vote="-1" aria-pressed="false" aria-label="踩">👎</button>
+  <form class="feedback-reason" data-reason hidden>
+    <input type="text" name="reason" maxlength="500" placeholder="为什么？（可选，留空让 agent 自己猜）" />
+    <button type="submit" class="feedback-save">保存</button>
+  </form>
+  <span class="feedback-status" data-status aria-live="polite"></span>
+</div>
+
+<script>
+  const KEY = 'reading-vote-token';
+  const m = location.hash.match(/vote-token=([^&]*)/);
+  if (m) {
+    if (m[1]) localStorage.setItem(KEY, decodeURIComponent(m[1]));
+    else localStorage.removeItem(KEY);
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  const token = localStorage.getItem(KEY);
+  const root = document.querySelector<HTMLElement>('[data-feedback]');
+
+  if (root && token) {
+    const d = root.dataset;
+    const btns = [...root.querySelectorAll<HTMLButtonElement>('[data-vote]')];
+    const form = root.querySelector<HTMLFormElement>('[data-reason]')!;
+    const input = form.querySelector<HTMLInputElement>('input')!;
+    const status = root.querySelector<HTMLElement>('[data-status]')!;
+    let current = 0;
+
+    const render = () => {
+      btns.forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.vote) === current)));
+      form.hidden = current === 0;
+    };
+    const api = (init?: RequestInit) =>
+      fetch(`/api/vote?slug=${encodeURIComponent(d.slug!)}`, {
+        ...init,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+    const send = async (vote: number, reason: string) => {
+      status.textContent = '…';
+      const body = {
+        slug: d.slug, title: d.title, source: d.source, domain: d.domain, author: d.author,
+        category: d.category, description: d.description, vote, reason,
+      };
+      const r = await api({ method: 'POST', body: JSON.stringify(body) }).catch(() => null);
+      status.textContent = r?.ok ? '已记录' : `失败${r ? ` (${r.status})` : ''}`;
+      return r?.ok;
+    };
+
+    api()
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((v) => {
+        root.hidden = false;
+        current = v?.vote ?? 0;
+        input.value = v?.reason ?? '';
+        render();
+      })
+      .catch((s) => {
+        root.hidden = false;
+        status.textContent = s === 401 ? 'token 无效' : '读取失败';
+      });
+
+    btns.forEach((b) =>
+      b.addEventListener('click', async () => {
+        const v = Number(b.dataset.vote);
+        const next = current === v ? 0 : v;
+        if (await send(next, next ? input.value.trim() : '')) {
+          current = next;
+          if (!next) input.value = '';
+          render();
+          if (next) input.focus();
+        }
+      })
+    );
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (current) send(current, input.value.trim());
+    });
+  }
+</script>
+
+<style>
+  .feedback {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.875rem;
+    color: var(--ink-3);
+  }
+  .feedback[hidden] { display: none; }
+  .feedback-btn {
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    filter: grayscale(1);
+    opacity: 0.7;
+  }
+  .feedback-btn[aria-pressed='true'] {
+    filter: none;
+    opacity: 1;
+    background: var(--mark);
+    border-color: var(--ink-3);
+  }
+  .feedback-reason { display: flex; gap: 0.4rem; flex: 1 1 100%; }
+  .feedback-reason[hidden] { display: none; }
+  .feedback-reason input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+  }
+  .feedback-save {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+    font: inherit;
+  }
+</style>

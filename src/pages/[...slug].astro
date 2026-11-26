@@ -3,6 +3,7 @@ import site from 'virtual:astro-reading-theme/config';
 import { getCollection, render } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import ListenButton from '../components/ListenButton.astro';
+import FeedbackButtons from '../components/FeedbackButtons.astro';
 import EntrySide from '../components/EntrySide.astro';
 import PostBar from '../components/PostBar.astro';
 import { base } from '../lib/base';
@@ -104,6 +105,19 @@ const sections = headings.filter((h) => h.depth === 2);
               </svg>
             </span>
           </a>
+        )
+      }
+      {
+        site.features.feedback && (
+          <FeedbackButtons
+            slug={post.id}
+            title={post.data.title}
+            source={post.data.source}
+            domain={domain}
+            author={post.data.author}
+            category={post.data.category}
+            description={post.data.description}
+          />
         )
       }
     </div>

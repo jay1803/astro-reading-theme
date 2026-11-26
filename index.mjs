@@ -19,8 +19,9 @@ import rehypeReading from './src/lib/rehype-reading.mjs';
  * @property {string} [manifestDescription] PWA manifest description
  * @property {{label:string, href:string}[]} [nav]  Header links, hrefs relative to base (e.g. '/about/')
  * @property {{label:string, href:string}} [footerLink]
- * @property {{stats?:boolean, category?:boolean, author?:boolean, domain?:boolean, listen?:boolean}} [features]
- *           stats page; category/author/domain browse pages; ListenButton on post pages
+ * @property {{stats?:boolean, category?:boolean, author?:boolean, domain?:boolean, listen?:boolean, feedback?:boolean}} [features]
+ *           stats page; category/author/domain browse pages; ListenButton on post pages;
+ *           feedback = owner-only 👍/👎 (needs the site to provide `/api/vote`, see FeedbackButtons.astro)
  * @property {Record<string,string>} [overrides]  Replace theme files with site files. Keys are paths relative to
  *           the theme's `src/` (e.g. 'components/PostEntry.astro', 'pages/[...slug].astro', 'lib/feed.ts'),
  *           values are site paths relative to the project root. Works for injected routes and for
@@ -41,7 +42,7 @@ export function resolveConfig(user) {
     overrides: {},
     ...user,
     dek: [user.dek ?? user.description ?? []].flat().filter(Boolean),
-    features: { stats: false, category: true, author: true, domain: true, listen: true, ...(user.features ?? {}) },
+    features: { stats: false, category: true, author: true, domain: true, listen: true, feedback: false, ...(user.features ?? {}) },
   };
 }
 
