@@ -176,7 +176,15 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
         const current = btn.closest<HTMLElement>('.entry');
         let next = current?.nextElementSibling as HTMLElement | null;
         while (next && !next.matches('.entry, [data-sentinel]')) next = next.nextElementSibling as HTMLElement | null;
-        next?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        if (next) {
+          // Wait one frame so the collapse (and scroll anchoring) has settled, then scroll to
+          // an explicit offset; scrollIntoView overshoots while the layout above is shrinking.
+          requestAnimationFrame(() => {
+            const margin = parseFloat(getComputedStyle(next!).scrollMarginTop) || 0;
+            const top = next!.getBoundingClientRect().top + window.scrollY - margin;
+            window.scrollTo({ top, behavior: 'smooth' });
+          });
+        }
         return;
       }
       // A collapsed entry's whole header opens the post.
