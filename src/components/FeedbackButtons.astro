@@ -1,4 +1,5 @@
 ---
+import { t } from '../lib/i18n';
 // Owner-only 👍/👎 feedback for the curating agent. Hidden for everyone except a
 // browser that holds the vote token (set once by visiting any page with
 // `#vote-token=<token>`; clear with `#vote-token=`). Backed by the site's
@@ -30,6 +31,7 @@ const p = Astro.props;
   <span class="feedback-label">这篇推荐得怎么样？</span>
   <button type="button" class="feedback-btn" data-vote="1" aria-pressed="false" aria-label="赞">👍</button>
   <button type="button" class="feedback-btn" data-vote="-1" aria-pressed="false" aria-label="踩">👎</button>
+  <button type="button" class="feedback-read" data-read aria-pressed="false" data-label-off={t.markRead} data-label-on={t.markedRead}>{t.markRead}</button>
   <form class="feedback-reason" data-reason hidden>
     <input type="text" name="reason" maxlength="500" placeholder="为什么？（可选，留空让 agent 自己猜）" />
     <button type="submit" class="feedback-save">保存</button>
@@ -57,7 +59,36 @@ const p = Astro.props;
     let current = 0;
 
     const render = () => {
-      btns.forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.vote) === current)));
+      // 「标记已读」 toggle: /api/read, mirrored into the feed's collapse cache.
+    const readBtn = root.querySelector<HTMLButtonElement>('[data-read]')!;
+    const renderRead = (on: boolean) => {
+      readBtn.setAttribute('aria-pressed', String(on));
+      readBtn.textContent = (on ? readBtn.dataset.labelOn : readBtn.dataset.labelOff) ?? '';
+    };
+    const readApi = (init?: RequestInit) =>
+      fetch(`/api/read?slug=${encodeURIComponent(d.slug!)}`, {
+        ...init,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+    readApi()
+      .then((r) => (r.ok ? r.json() : null))
+      .then((v) => v && renderRead(Boolean(v.read)))
+      .catch(() => {});
+    readBtn.addEventListener('click', async () => {
+      const next = readBtn.getAttribute('aria-pressed') !== 'true';
+      status.textContent = '…';
+      const r = await readApi({ method: 'POST', body: JSON.stringify({ read: next }) }).catch(() => null);
+      status.textContent = r?.ok ? '已记录' : `失败${r ? ` (${r.status})` : ''}`;
+      if (!r?.ok) return;
+      renderRead(next);
+      try {
+        const set = new Set<string>(JSON.parse(localStorage.getItem('reading-read') || '[]'));
+        next ? set.add(d.slug!) : set.delete(d.slug!);
+        localStorage.setItem('reading-read', JSON.stringify([...set]));
+      } catch {}
+    });
+
+    btns.forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.vote) === current)));
       form.hidden = current === 0;
     };
     const api = (init?: RequestInit) =>
@@ -137,6 +168,21 @@ const p = Astro.props;
     cursor: pointer;
     filter: grayscale(1);
     opacity: 0.7;
+  }
+  .feedback-read {
+    margin-left: 0.25rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-2);
+    font: inherit;
+    cursor: pointer;
+  }
+  .feedback-read[aria-pressed='true'] {
+    background: var(--mark);
+    border-color: var(--ink-3);
+    color: var(--ink);
   }
   .feedback-btn[aria-pressed='true'] {
     filter: none;

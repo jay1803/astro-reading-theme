@@ -65,7 +65,7 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
     </p>
 
     <h2 class="entry-title" id={`t-${post.id}`}><a href={permalink}>{title}</a></h2>
-    <p class="entry-disliked-note" aria-hidden="true">{t.disliked}</p>
+    <p class="entry-collapsed-note" aria-hidden="true" data-note-disliked={t.disliked} data-note-read={t.readCollapsed}></p>
 
     <div class="prose entry-content">
       <Content />
@@ -80,6 +80,7 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
         )
       }
       <a href={permalink}>{t.permalink}</a>
+      <button type="button" class="entry-markread" data-markread hidden>{t.markRead}</button>
     </p>
   </div>
 
@@ -109,42 +110,71 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
     heading.scrollIntoView({ block: 'start' });
   });
 
-  // Owner-only: collapse posts Max 👎'd to just their header (feedback feature).
-  // Disliked slugs are cached in localStorage (instant + offline/PWA), then refreshed
-  // from /api/disliked. FeedbackButtons updates the cache when voting on a post page.
+  // Owner-only: collapse posts Max 👎'd or marked read to just their header.
+  // State is cached in localStorage (instant + offline/PWA), refreshed from /api/collapsed.
+  // FeedbackButtons (post page) and the feed's 「标记已读」 button update the same caches.
   const TOKEN_KEY = 'reading-vote-token';
-  const CACHE_KEY = 'reading-disliked';
-  const readCache = (): Set<string> => {
+  const KEYS = { disliked: 'reading-disliked', read: 'reading-read' } as const;
+  const readSet = (k: string): Set<string> => {
     try {
-      return new Set(JSON.parse(localStorage.getItem(CACHE_KEY) || '[]'));
+      return new Set(JSON.parse(localStorage.getItem(k) || '[]'));
     } catch {
       return new Set();
     }
   };
-  const applyDisliked = () => {
-    const disliked = readCache();
+  const applyCollapsed = () => {
+    const disliked = readSet(KEYS.disliked);
+    const read = readSet(KEYS.read);
     document.querySelectorAll<HTMLElement>('.entry[data-slug]').forEach((el) => {
-      el.classList.toggle('entry--disliked', disliked.has(el.dataset.slug!));
+      const slug = el.dataset.slug!;
+      const reason = disliked.has(slug) ? 'disliked' : read.has(slug) ? 'read' : '';
+      el.classList.toggle('entry--collapsed', Boolean(reason));
+      const note = el.querySelector<HTMLElement>('.entry-collapsed-note');
+      if (note) note.textContent = reason === 'disliked' ? note.dataset.noteDisliked! : reason ? note.dataset.noteRead! : '';
+      el.querySelector<HTMLElement>('[data-markread]')?.removeAttribute('hidden');
     });
   };
   const token = localStorage.getItem(TOKEN_KEY);
   if (token && document.querySelector('.entry[data-slug]')) {
-    applyDisliked();
-    fetch('/api/disliked', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
+    applyCollapsed();
+    fetch('/api/collapsed', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => {
-        if (!Array.isArray(d?.slugs)) return;
-        localStorage.setItem(CACHE_KEY, JSON.stringify(d.slugs));
-        applyDisliked();
+        if (!Array.isArray(d?.disliked) || !Array.isArray(d?.read)) return;
+        localStorage.setItem(KEYS.disliked, JSON.stringify(d.disliked));
+        localStorage.setItem(KEYS.read, JSON.stringify(d.read));
+        applyCollapsed();
       })
       .catch(() => {});
-    document.addEventListener('feed:append', () => applyDisliked());
+    document.addEventListener('feed:append', () => applyCollapsed());
     // Back-navigation from a post page restores this page from bfcache: re-apply.
-    window.addEventListener('pageshow', (e) => e.persisted && applyDisliked());
-    // A collapsed entry's whole header opens the post.
-    document.addEventListener('click', (e) => {
+    window.addEventListener('pageshow', (e) => e.persisted && applyCollapsed());
+    document.addEventListener('click', async (e) => {
       const target = e.target as Element | null;
-      const entry = target?.closest<HTMLElement>('.entry--disliked');
+      // 「标记已读」 in the feed: save, then collapse this entry.
+      const btn = target?.closest<HTMLButtonElement>('[data-markread]');
+      if (btn) {
+        const slug = btn.closest<HTMLElement>('.entry')?.dataset.slug;
+        if (!slug) return;
+        btn.disabled = true;
+        const r = await fetch(`/api/read?slug=${encodeURIComponent(slug)}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ read: true }),
+        }).catch(() => null);
+        btn.disabled = false;
+        if (!r?.ok) {
+          btn.textContent = `${btn.textContent?.replace(/（.*$/, '')}（失败）`;
+          return;
+        }
+        const set = readSet(KEYS.read);
+        set.add(slug);
+        localStorage.setItem(KEYS.read, JSON.stringify([...set]));
+        applyCollapsed();
+        return;
+      }
+      // A collapsed entry's whole header opens the post.
+      const entry = target?.closest<HTMLElement>('.entry--collapsed');
       if (!entry || target?.closest('a')) return;
       const link = entry.querySelector<HTMLAnchorElement>('.entry-title a');
       if (link) location.href = link.href;
@@ -223,27 +253,42 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
   .entry-links a {
     padding: 0.75rem 0;
   }
-  .entry-disliked-note {
+  .entry-collapsed-note {
+    display: none;
+  }
+  .entry-markread {
+    padding: 0.75rem 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .entry-markread:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+  .entry-markread[hidden] {
     display: none;
   }
   /* 👎'd by the owner: header only (number, meta, title). Post page is unchanged. */
-  .entry.entry--disliked {
+  .entry.entry--collapsed {
     margin-top: 3rem;
     cursor: pointer;
   }
-  .entry--disliked .entry-num {
+  .entry--collapsed .entry-num {
     font-size: clamp(1.5rem, 3vw, 2rem);
     margin-bottom: 0.5rem;
   }
-  .entry--disliked .entry-content,
-  .entry--disliked .entry-links,
-  .entry--disliked > :global(.entry-side) {
+  .entry--collapsed .entry-content,
+  .entry--collapsed .entry-links,
+  .entry--collapsed > :global(.entry-side) {
     display: none;
   }
-  .entry--disliked .entry-title a {
+  .entry--collapsed .entry-title a {
     color: var(--ink-3);
   }
-  .entry--disliked .entry-disliked-note {
+  .entry--collapsed .entry-collapsed-note {
     display: block;
     margin: 0.375rem 0 0;
     font-family: var(--font-sans);
@@ -251,7 +296,7 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
     color: var(--ink-3);
   }
   @media (min-width: 1080px) {
-    .entry.entry--disliked .entry-meta {
+    .entry.entry--collapsed .entry-meta {
       display: flex;
     }
     .entry {
