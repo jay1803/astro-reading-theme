@@ -82,11 +82,12 @@ const { slug } = Astro.props;
 
     const setUI = () => {
       const active = state === 'playing' || state === 'loading';
-      iconPlay.hidden = active;
-      iconPause.hidden = !active;
+      // SVG elements have no `hidden` property: toggle the attribute instead.
+      iconPlay.toggleAttribute('hidden', active);
+      iconPause.toggleAttribute('hidden', !active);
       label.textContent = (state === 'idle' ? d.labelListen : active ? d.labelPause : d.labelResume) ?? '';
       stopBtn.hidden = rateSel.hidden = state === 'idle';
-      status.textContent = state === 'loading' ? '…' : '';
+      status.textContent = state === 'loading' ? '加载中…' : '';
     };
 
     const mark = (el: HTMLElement | null) => {
@@ -191,6 +192,13 @@ const { slug } = Astro.props;
   .listen-aux:hover { color: var(--ink); background: var(--surface); }
   .listen-btn[hidden], .listen-aux[hidden], svg[hidden] { display: none; }
   .listen-status { color: var(--ink-3); }
+  select.listen-aux {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0 1.75rem 0 0.875rem;
+    background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236f6e77' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.65rem center / 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
 
   :global(.is-speaking) {
     background: var(--mark);
