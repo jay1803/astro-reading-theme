@@ -171,6 +171,12 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
         set.add(slug);
         localStorage.setItem(KEYS.read, JSON.stringify([...set]));
         applyCollapsed();
+        // Jump to the start of the next entry (scroll-margin-top keeps it below the header).
+        // If it isn't loaded yet, scroll to the infinite-feed sentinel so it loads.
+        const current = btn.closest<HTMLElement>('.entry');
+        let next = current?.nextElementSibling as HTMLElement | null;
+        while (next && !next.matches('.entry, [data-sentinel]')) next = next.nextElementSibling as HTMLElement | null;
+        next?.scrollIntoView({ block: 'start', behavior: 'smooth' });
         return;
       }
       // A collapsed entry's whole header opens the post.
