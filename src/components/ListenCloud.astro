@@ -1,0 +1,200 @@
+---
+// Read-aloud with a cloud neural voice. The site must provide `POST /api/tts`
+// ({ slug, text } → audio/mpeg); reading does it with a Pages Function (Edge TTS).
+// Enabled by `features.listen: 'cloud'`. Plays paragraph by paragraph, preloading ahead.
+import { t } from '../lib/i18n';
+interface Props {
+  slug: string;
+}
+const { slug } = Astro.props;
+---
+
+<div
+  class="listen"
+  data-listen-cloud
+  data-slug={slug}
+  data-label-listen={t.listen}
+  data-label-pause={t.pause}
+  data-label-resume={t.resume}
+>
+  <button type="button" class="listen-btn" data-listen-toggle aria-label={t.listenAria}>
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true" data-icon-play><path d="M7 4.5v15l12-7.5z" /></svg>
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true" data-icon-pause hidden><path d="M6 4.5h4v15H6zM14 4.5h4v15h-4z" /></svg>
+    <span data-listen-label>{t.listen}</span>
+  </button>
+  <button type="button" class="listen-aux" data-listen-stop hidden>{t.stop}</button>
+  <select class="listen-aux" data-listen-rate aria-label={t.rateAria} hidden>
+    <option value="0.85">0.85×</option>
+    <option value="1" selected>1×</option>
+    <option value="1.25">1.25×</option>
+    <option value="1.5">1.5×</option>
+    <option value="2">2×</option>
+  </select>
+  <span class="listen-status" data-listen-status aria-live="polite"></span>
+</div>
+
+<script>
+  // 0.1s of silence: played inside the click so iOS lets this <audio> play later without a gesture.
+  const SILENCE =
+    'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+
+  const root = document.querySelector<HTMLElement>('[data-listen-cloud]');
+  if (root) {
+    const d = root.dataset;
+    const toggle = root.querySelector<HTMLButtonElement>('[data-listen-toggle]')!;
+    const stopBtn = root.querySelector<HTMLButtonElement>('[data-listen-stop]')!;
+    const rateSel = root.querySelector<HTMLSelectElement>('[data-listen-rate]')!;
+    const label = root.querySelector<HTMLElement>('[data-listen-label]')!;
+    const status = root.querySelector<HTMLElement>('[data-listen-status]')!;
+    const iconPlay = root.querySelector<SVGElement>('[data-icon-play]')!;
+    const iconPause = root.querySelector<SVGElement>('[data-icon-pause]')!;
+
+    const article = document.querySelector('.single-entry');
+    const blocks = Array.from(
+      article?.querySelectorAll<HTMLElement>('.entry-title, .entry-dek, .prose p, .prose h2, .prose h3, .prose h4, .prose li') ?? []
+    ).filter((el) => (el.textContent ?? '').trim().length > 0 && !el.querySelector('p, li'));
+
+    const audio = new Audio();
+    audio.preload = 'auto';
+    const clips = new Map<number, Promise<string>>(); // block index → object URL
+    const PRELOAD = 2;
+    let index = 0;
+    let state: 'idle' | 'loading' | 'playing' | 'paused' = 'idle';
+    let current: HTMLElement | null = null;
+    let run = 0; // bumps on stop so late fetches don't resume playback
+
+    const clip = (i: number) => {
+      if (!clips.has(i)) {
+        const text = (blocks[i].textContent ?? '').replace(/\s+/g, ' ').trim();
+        const p = fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: d.slug, text: text.slice(0, 2500) }),
+        }).then(async (r) => {
+          if (!r.ok) throw new Error(String(r.status));
+          return URL.createObjectURL(await r.blob());
+        });
+        p.catch(() => clips.delete(i)); // allow a retry later
+        clips.set(i, p);
+      }
+      return clips.get(i)!;
+    };
+
+    const setUI = () => {
+      const active = state === 'playing' || state === 'loading';
+      iconPlay.hidden = active;
+      iconPause.hidden = !active;
+      label.textContent = (state === 'idle' ? d.labelListen : active ? d.labelPause : d.labelResume) ?? '';
+      stopBtn.hidden = rateSel.hidden = state === 'idle';
+      status.textContent = state === 'loading' ? '…' : '';
+    };
+
+    const mark = (el: HTMLElement | null) => {
+      current?.classList.remove('is-speaking');
+      current = el;
+      if (el) {
+        el.classList.add('is-speaking');
+        const r = el.getBoundingClientRect();
+        if (r.top < 80 || r.bottom > window.innerHeight - 80) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    };
+
+    const playIndex = async () => {
+      const myRun = run;
+      if (index >= blocks.length) return finish();
+      mark(blocks[index]);
+      for (let k = 1; k <= PRELOAD && index + k < blocks.length; k++) clip(index + k).catch(() => {});
+      let url: string;
+      try {
+        state = 'loading';
+        setUI();
+        url = await clip(index);
+      } catch {
+        if (myRun !== run) return;
+        finish();
+        status.textContent = '朗读加载失败，稍后再试';
+        return;
+      }
+      if (myRun !== run || state === 'paused') return;
+      audio.src = url;
+      audio.playbackRate = parseFloat(rateSel.value);
+      state = 'playing';
+      setUI();
+      audio.play().catch(() => {
+        state = 'paused';
+        setUI();
+      });
+    };
+
+    audio.addEventListener('ended', () => {
+      if (state !== 'playing' || !audio.src.startsWith('blob:')) return;
+      index++;
+      playIndex();
+    });
+
+    const finish = () => {
+      run++;
+      audio.pause();
+      state = 'idle';
+      index = 0;
+      mark(null);
+      setUI();
+    };
+
+    toggle.addEventListener('click', () => {
+      if (state === 'idle') {
+        audio.src = SILENCE; // unlock autoplay for later paragraphs (iOS)
+        audio.play().catch(() => {});
+        playIndex();
+      } else if (state === 'playing' || state === 'loading') {
+        audio.pause();
+        state = 'paused';
+        setUI();
+      } else {
+        state = 'playing';
+        setUI();
+        if (audio.src.startsWith('blob:') && !audio.ended) audio.play().catch(() => {});
+        else playIndex();
+      }
+    });
+    stopBtn.addEventListener('click', finish);
+    rateSel.addEventListener('change', () => {
+      audio.playbackRate = parseFloat(rateSel.value);
+    });
+    window.addEventListener('pagehide', () => audio.pause());
+  }
+</script>
+
+<style>
+  .listen {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 1.75rem;
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+  }
+  .listen-btn,
+  .listen-aux {
+    min-height: 36px;
+    padding: 0 0.875rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-2);
+    font: inherit;
+    cursor: pointer;
+  }
+  .listen-btn { display: inline-flex; align-items: center; gap: 0.45rem; }
+  .listen-btn:hover,
+  .listen-aux:hover { color: var(--ink); background: var(--surface); }
+  .listen-btn[hidden], .listen-aux[hidden], svg[hidden] { display: none; }
+  .listen-status { color: var(--ink-3); }
+
+  :global(.is-speaking) {
+    background: var(--mark);
+    border-radius: 3px;
+    box-decoration-break: clone;
+  }
+</style>

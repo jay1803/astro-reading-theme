@@ -3,6 +3,7 @@ import site from 'virtual:astro-reading-theme/config';
 import { getCollection, render } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import ListenButton from '../components/ListenButton.astro';
+import ListenCloud from '../components/ListenCloud.astro';
 import FeedbackButtons from '../components/FeedbackButtons.astro';
 import EntrySide from '../components/EntrySide.astro';
 import PostBar from '../components/PostBar.astro';
@@ -81,7 +82,7 @@ const sections = headings.filter((h) => h.depth === 2);
 
       <h1 id="post-title" class="post-title entry-title">{title}</h1>
       {showDek && <p class="post-dek entry-dek">{panguSpace(post.data.description)}</p>}
-      {site.features.listen && <ListenButton />}
+      {site.features.listen === 'cloud' ? <ListenCloud slug={post.id} /> : site.features.listen && <ListenButton />}
 
       <div class="prose post-body">
         <Content />
