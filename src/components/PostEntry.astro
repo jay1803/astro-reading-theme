@@ -31,6 +31,7 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
   id={`p-${post.id}`}
   aria-labelledby={`t-${post.id}`}
   data-entry
+  data-slug={post.id}
   data-num={numLabel}
   data-title={title}
   data-minutes={t.minutes(minutes)}
@@ -64,6 +65,7 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
     </p>
 
     <h2 class="entry-title" id={`t-${post.id}`}><a href={permalink}>{title}</a></h2>
+    <p class="entry-disliked-note" aria-hidden="true">{t.disliked}</p>
 
     <div class="prose entry-content">
       <Content />
@@ -106,6 +108,48 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
     event.preventDefault();
     heading.scrollIntoView({ block: 'start' });
   });
+
+  // Owner-only: collapse posts Max 👎'd to just their header (feedback feature).
+  // Disliked slugs are cached in localStorage (instant + offline/PWA), then refreshed
+  // from /api/disliked. FeedbackButtons updates the cache when voting on a post page.
+  const TOKEN_KEY = 'reading-vote-token';
+  const CACHE_KEY = 'reading-disliked';
+  const readCache = (): Set<string> => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(CACHE_KEY) || '[]'));
+    } catch {
+      return new Set();
+    }
+  };
+  const applyDisliked = () => {
+    const disliked = readCache();
+    document.querySelectorAll<HTMLElement>('.entry[data-slug]').forEach((el) => {
+      el.classList.toggle('entry--disliked', disliked.has(el.dataset.slug!));
+    });
+  };
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token && document.querySelector('.entry[data-slug]')) {
+    applyDisliked();
+    fetch('/api/disliked', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => {
+        if (!Array.isArray(d?.slugs)) return;
+        localStorage.setItem(CACHE_KEY, JSON.stringify(d.slugs));
+        applyDisliked();
+      })
+      .catch(() => {});
+    document.addEventListener('feed:append', () => applyDisliked());
+    // Back-navigation from a post page restores this page from bfcache: re-apply.
+    window.addEventListener('pageshow', (e) => e.persisted && applyDisliked());
+    // A collapsed entry's whole header opens the post.
+    document.addEventListener('click', (e) => {
+      const target = e.target as Element | null;
+      const entry = target?.closest<HTMLElement>('.entry--disliked');
+      if (!entry || target?.closest('a')) return;
+      const link = entry.querySelector<HTMLAnchorElement>('.entry-title a');
+      if (link) location.href = link.href;
+    });
+  }
 </script>
 
 <style>
@@ -179,7 +223,37 @@ const showSource = Boolean(domain && !isPrivateSourceDomain(domain));
   .entry-links a {
     padding: 0.75rem 0;
   }
+  .entry-disliked-note {
+    display: none;
+  }
+  /* 👎'd by the owner: header only (number, meta, title). Post page is unchanged. */
+  .entry.entry--disliked {
+    margin-top: 4rem;
+    cursor: pointer;
+  }
+  .entry--disliked .entry-num {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    margin-bottom: 0.5rem;
+  }
+  .entry--disliked .entry-content,
+  .entry--disliked .entry-links,
+  .entry--disliked > :global(.entry-side) {
+    display: none;
+  }
+  .entry--disliked .entry-title a {
+    color: var(--ink-3);
+  }
+  .entry--disliked .entry-disliked-note {
+    display: block;
+    margin: 0.375rem 0 0;
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    color: var(--ink-3);
+  }
   @media (min-width: 1080px) {
+    .entry.entry--disliked .entry-meta {
+      display: flex;
+    }
     .entry {
       grid-template-columns: minmax(0, var(--measure)) var(--side);
       justify-content: space-between;

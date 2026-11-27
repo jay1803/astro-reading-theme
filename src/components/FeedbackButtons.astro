@@ -95,6 +95,12 @@ const p = Astro.props;
         const next = current === v ? 0 : v;
         if (await send(next, next ? input.value.trim() : '')) {
           current = next;
+          // keep the home feed's collapsed-post cache in sync (see PostEntry.astro)
+          try {
+            const set = new Set<string>(JSON.parse(localStorage.getItem('reading-disliked') || '[]'));
+            next === -1 ? set.add(d.slug!) : set.delete(d.slug!);
+            localStorage.setItem('reading-disliked', JSON.stringify([...set]));
+          } catch {}
           if (!next) input.value = '';
           render();
           if (next) input.focus();
